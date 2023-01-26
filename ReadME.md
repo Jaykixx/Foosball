@@ -1,6 +1,9 @@
-Tensorboard Command
+# Infos
+Verwendet IsaacSim 2022.1.1 + OmniIsaacGymEnvs vom 01.11.2022 (Commit 62c9bbf)
 
-# Privat
+## Tensorboard Command
+
+### Privat
 ``
 doskey PYTHON_PATH=C:\Users\Janosch\AppData\Local\ov\pkg\isaac_sim-2022.1.1\python.bat $*
 ``
@@ -10,7 +13,7 @@ PYTHON_PATH -m tensorboard.main --logdir runs/Foosball/summaries
 ``
 
 
-# Leistungsrechner
+### Leistungsrechner
 ``
 doskey PYTHON_PATH=C:\Users\"Janosch Moos"\AppData\Local\ov\pkg\isaac_sim-2022.1.1\python.bat $*
 ``
