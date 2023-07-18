@@ -1,10 +1,7 @@
-import time
-
 from omniisaacgymenvs.utils.hydra_cfg.hydra_utils import *
 from omniisaacgymenvs.utils.hydra_cfg.reformat import omegaconf_to_dict, print_dict
 from omniisaacgymenvs.utils.rlgames.rlgames_utils import RLGPUAlgoObserver, RLGPUEnv
 from omniisaacgymenvs.utils.config_utils.path_utils import retrieve_checkpoint_path
-from omniisaacgymenvs.envs.vec_env_rlgames import VecEnvRLGames
 
 import hydra
 from omegaconf import DictConfig
@@ -12,10 +9,11 @@ from omegaconf import DictConfig
 from rl_games.common import env_configurations, vecenv
 from rl_games.torch_runner import Runner
 import os
-import torch
-import csv
 
+from environments.env_base import CustomVecEnvRLGames
 from utils.task_util import initialize_task
+import utils.models.agents as agents
+import utils.models.players as players
 
 
 class RLGTrainer():
@@ -45,6 +43,15 @@ class RLGTrainer():
     def run(self):
         # create runner and set the settings
         runner = Runner(RLGPUAlgoObserver())
+
+        # Override builder for compatibility
+        runner.algo_factory.register_builder(
+            'a2c_continuous', lambda **kwargs: agents.A2CAgent(**kwargs)
+        )
+        runner.player_factory.register_builder(
+            'a2c_continuous', lambda **kwargs: players.A2CPlayer(**kwargs)
+        )
+
         runner.load(self.rlg_config_dict)
         runner.reset()
 
@@ -76,23 +83,16 @@ def parse_hydra_configs(cfg: DictConfig):
 
     headless = cfg.headless
 
-    env = VecEnvRLGames(headless=headless)
+    env = CustomVecEnvRLGames(headless=headless)
     task = initialize_task(cfg_dict, env)
 
     # sets seed. if seed is -1 will pick a random one
     from omni.isaac.core.utils.torch.maths import set_seed
     cfg.seed = set_seed(cfg.seed, torch_deterministic=cfg.torch_deterministic)
 
-    n, dof = task.num_envs, task.num_actions
-    obs = env.reset()
-    for i in range(1000):
-        action = torch.rand((n, dof), device='cuda:0') * 2 - 1
-        obs, rew, done, _ = env.step(action)
-        time.sleep(0.01)
-
-    # rlg_trainer = RLGTrainer(cfg, cfg_dict)
-    # rlg_trainer.launch_rlg_hydra(env)
-    # rlg_trainer.run()
+    rlg_trainer = RLGTrainer(cfg, cfg_dict)
+    rlg_trainer.launch_rlg_hydra(env)
+    rlg_trainer.run()
     env.close()
 
 

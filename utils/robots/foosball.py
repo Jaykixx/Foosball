@@ -17,6 +17,7 @@ class Foosball(Robot):
             usd_path: Optional[str] = None,
             translation: Optional[torch.tensor] = None,
             orientation: Optional[torch.tensor] = None,
+            device: str = 'cpu'
     ) -> None:
         """[summary]
         """
@@ -42,6 +43,8 @@ class Foosball(Robot):
             orientation=self._orientation,
             articulation_controller=None,
         )
+
+        self.qdlim = torch.tensor([4.0] * 8 + [100*np.pi] * 8, device=device)
 
         self.dof_paths = [
             "Keeper_W_PrismaticJoint",
@@ -84,13 +87,35 @@ class Foosball(Robot):
             "Offense_B_RevoluteJoint"
         ]
 
+        self.dof_paths_rev = [
+            "Keeper_W_RevoluteJoint",
+            "Defense_W_RevoluteJoint",
+            "Mid_W_RevoluteJoint",
+            "Offense_W_RevoluteJoint",
+            "Keeper_B_RevoluteJoint",
+            "Defense_B_RevoluteJoint",
+            "Mid_B_RevoluteJoint",
+            "Offense_B_RevoluteJoint"
+        ]
+
+        self.dof_paths_pris = [
+            "Keeper_W_PrismaticJoint",
+            "Defense_W_PrismaticJoint",
+            "Mid_W_PrismaticJoint",
+            "Offense_W_PrismaticJoint",
+            "Keeper_B_PrismaticJoint",
+            "Defense_B_PrismaticJoint",
+            "Mid_B_PrismaticJoint",
+            "Offense_B_PrismaticJoint"
+        ]
+
     def apply_joint_settings(self):
         drive_type = ["linear"] * 8 + ["angular"] * 8
         default_dof_pos = [0.0] * 8 + [70.0] * 8
         stiffness = [1000.0] * 8 + [400*np.pi/180] * 8
         damping = [50.0] * 8 + [80*np.pi/180] * 8
         max_force = [70.0] * 8 + [0.47] * 8
-        max_velocity = [4.0] * 8 + [21000.0] * 8
+        max_velocity = [4.0] * 8 + [18000.0] * 8
 
         for i, dof in enumerate(self.dof_paths):
             set_drive(

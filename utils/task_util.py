@@ -1,11 +1,9 @@
 def initialize_task(config, env, init_sim=True):
-    from environments.Foosball.foosball_camera import FoosballCameraTask
-    from environments.Foosball.base import FoosballTask
+    from environments.Foosball.foosball import FoosballGame
 
     # Mappings from strings to environments
     task_map = {
-        "FoosballCamera": FoosballCameraTask,
-        "Foosball": FoosballTask
+        "Foosball": FoosballGame  # TODO: Check self play functionality in RLGames
     }
 
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig
