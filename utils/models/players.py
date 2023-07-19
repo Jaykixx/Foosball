@@ -64,7 +64,7 @@ class A2CPlayer(PpoPlayerContinuous):
         n_games = self.games_num
         render = self.render_env
         n_game_life = self.n_game_life
-        is_determenistic = self.is_determenistic
+        is_deterministic = self.is_deterministic
         sum_rewards = 0
         sum_steps = 0
         sum_game_res = 0
@@ -109,9 +109,9 @@ class A2CPlayer(PpoPlayerContinuous):
                 if has_masks:
                     masks = self.env.get_action_mask()
                     action = self.get_masked_action(
-                        obses, masks, is_determenistic)
+                        obses, masks, is_deterministic)
                 else:
-                    action = self.get_action(obs, is_determenistic)
+                    action = self.get_action(obs, is_deterministic)
 
                 obses, r, done, info = self.env_step(self.env, action)
                 obs['obs'] = obses
