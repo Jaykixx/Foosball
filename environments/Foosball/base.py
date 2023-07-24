@@ -8,6 +8,7 @@ from omni.isaac.core.materials import PhysicsMaterial
 from omni.isaac.core.prims import RigidPrimView
 from utils.robots.foosball import Foosball
 import omni.replicator.core as rep
+from pxr import PhysxSchema
 from PIL import Image
 import numpy as np
 import torch
@@ -57,6 +58,9 @@ class FoosballTask(RLTask):
 
         super().set_up_scene(scene)
 
+        physxSceneAPI = PhysxSchema.PhysxSceneAPI.Apply(get_prim_at_path('/physicsScene'))
+        physxSceneAPI.CreateEnableCCDAttr().Set(True)
+
         # Get robot articulations
         self._robots = ArticulationView(
             prim_paths_expr="/World/envs/env_.*/Foosball", name="robot_view"
@@ -77,33 +81,33 @@ class FoosballTask(RLTask):
         self.rev_joints = self.robot.dof_paths_rev
 
     def get_game_ball(self) -> None:
-        physics_material_path = find_unique_string_name(
-            initial_name="/World/Physics_Materials/physics_material",
-            is_unique_fn=lambda x: not is_prim_path_valid(x),
-        )
-        physics_material = PhysicsMaterial(
-            prim_path=physics_material_path,
-            dynamic_friction=0.005,
-            static_friction=0.0025,
-            restitution=0.0,
-        )
-
+        # physics_material_path = find_unique_string_name(
+        #     initial_name="/World/Physics_Materials/physics_material",
+        #     is_unique_fn=lambda x: not is_prim_path_valid(x),
+        # )
+        # physics_material = PhysicsMaterial(
+        #     prim_path=physics_material_path,
+        #     dynamic_friction=0.005,
+        #     static_friction=0.0025,
+        #     restitution=0.0,
+        # )
+        #
         ball_path = self.default_zero_env_path + "/Ball"
         self._init_ball_position = torch.tensor(
             [[0, 0, 0.79025]], device=self.device
         ).repeat(self._num_envs, 1)
         self._ball_radius = 0.01725
-        color = torch.tensor([255, 191, 0], device=self.device)
-        ball = DynamicSphere(
-            ball_path,
-            position=self._init_ball_position[0],
-            radius=self._ball_radius,
-            color=color,
-            mass=0.022,
-            physics_material=physics_material
-        )
+        # color = torch.tensor([255, 191, 0], device=self.device)
+        # ball = DynamicSphere(
+        #     ball_path,
+        #     position=self._init_ball_position[0],
+        #     radius=self._ball_radius,
+        #     color=color,
+        #     mass=0.022,
+        #     physics_material=physics_material
+        # )
         self._sim_config.apply_articulation_settings(
-            "Ball", get_prim_at_path(ball.prim_path),
+            "Ball", get_prim_at_path(ball_path),
             self._sim_config.parse_actor_config("Ball")
         )
 
