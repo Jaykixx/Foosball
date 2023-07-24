@@ -41,7 +41,7 @@ headless: False
 
 # set default task and default training config based on task
 defaults:
-  - task: Foosball  # FoosballCamera
+  - task: FoosballBlocking  # FoosballCamera
   - train: ${task}PPO
   - hydra/job_logging: disabled
 
