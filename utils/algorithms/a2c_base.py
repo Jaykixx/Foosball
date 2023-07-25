@@ -248,7 +248,8 @@ class ContinuousA2CBase(CustomA2CBase):
         if self.is_ndp:
             self.tensor_list += ['dmp_init_obs', 'progress_buf']
 
-        self.model.init_tensors(self.device)
+        if hasattr(self.model, "init_tensors"):
+            self.model.init_tensors(self.device)
 
     def train_epoch(self):
         super().train_epoch()

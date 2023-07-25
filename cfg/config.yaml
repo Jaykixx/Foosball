@@ -33,7 +33,7 @@ solver_type: 1 # 0: pgs, 1: tgs
 
 # RLGames Arguments
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
-test: True
+test: False
 # used to set checkpoint path
 checkpoint: ''  # 'runs\FrankaPushCube\nn\FrankaPushCube.pth'
 
