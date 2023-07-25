@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from rl_games.common import env_configurations, vecenv
 from rl_games.torch_runner import Runner
 import os
+import datetime
 
 from environments.env_base import CustomVecEnvRLGames
 from utils.task_util import initialize_task
@@ -72,6 +73,20 @@ class RLGTrainer():
 @hydra.main(config_name="config", config_path="cfg")
 def parse_hydra_configs(cfg: DictConfig):
 
+    time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    headless = cfg.headless
+    rank = int(os.getenv("LOCAL_RANK", "0"))
+    if cfg.multi_gpu:
+        cfg.device_id = rank
+        cfg.rl_device = f'cuda:{rank}'
+    enable_viewport = "enable_cameras" in cfg.task.sim and cfg.task.sim.enable_cameras
+    env = CustomVecEnvRLGames(headless=headless,
+                              sim_device=cfg.device_id,
+                              enable_livestream=cfg.enable_livestream,
+                              enable_viewport=enable_viewport
+    )
+
     # ensure checkpoints can be specified as relative paths
     if cfg.checkpoint:
         cfg.checkpoint = retrieve_checkpoint_path(cfg.checkpoint)
@@ -81,14 +96,12 @@ def parse_hydra_configs(cfg: DictConfig):
     cfg_dict = omegaconf_to_dict(cfg)
     print_dict(cfg_dict)
 
-    headless = cfg.headless
-
-    env = CustomVecEnvRLGames(headless=headless)
-    task = initialize_task(cfg_dict, env)
-
     # sets seed. if seed is -1 will pick a random one
     from omni.isaac.core.utils.torch.maths import set_seed
     cfg.seed = set_seed(cfg.seed, torch_deterministic=cfg.torch_deterministic)
+    cfg_dict['seed'] = cfg.seed
+
+    task = initialize_task(cfg_dict, env)
 
     rlg_trainer = RLGTrainer(cfg, cfg_dict)
     rlg_trainer.launch_rlg_hydra(env)
