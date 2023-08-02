@@ -2,12 +2,14 @@ def initialize_task(config, env, init_sim=True):
     from environments.Foosball.foosball_blocking import FoosballBlockingTask
     from environments.Foosball.foosball_goal_shot import FoosballGoalShotTask
     from environments.Foosball.foosball import FoosballGame
+    from environments.Foosball.foosball_selfplay import FoosballSelfPlay
 
     # Mappings from strings to environments
     task_map = {
         "FoosballBlocking": FoosballBlockingTask,
         "FoosballGoalShot": FoosballGoalShotTask,
-        "Foosball": FoosballGame  # TODO: Check self play functionality in RLGames
+        "Foosball": FoosballGame,
+        "FoosballSelfPlay": FoosballSelfPlay
     }
 
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig
