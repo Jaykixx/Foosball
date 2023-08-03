@@ -143,7 +143,7 @@ class FoosballTask(RLTask):
     def reset_ball(self, env_ids):
         indices = env_ids.to(dtype=torch.int32)
         init_ball_pos = self._init_ball_position[env_ids].clone()
-        init_ball_pos[..., 1] += 0.3
+        # init_ball_pos[..., 1] += 0.3
         self._balls.set_world_poses(
             init_ball_pos + self._env_pos[env_ids], indices=indices
         )
@@ -159,7 +159,7 @@ class FoosballTask(RLTask):
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
 
-        self.actions = actions.clone().to(self.device)
+        # self.actions = actions.clone().to(self.device)
 
         # self._robots.set_joint_velocity_targets(
         #     actions * self._robot_vel_limit[:, self.active_dofs], joint_indices=self.active_dofs
@@ -220,9 +220,9 @@ class FoosballTask(RLTask):
         self.rew_buf[neutral_mask] = 0
 
         # Check Termination penalty
-        limit = self._init_ball_position[0, 2] + self.termination_height
-        mask_z = pos[:, 2] > limit
-        self.rew_buf[mask_z] = - self.termination_penalty
+        # limit = self._init_ball_position[0, 2] + self.termination_height
+        # mask_z = pos[:, 2] > limit
+        # self.rew_buf[mask_z] = - self.termination_penalty
 
     def is_done(self) -> None:
         pos = self._balls.get_world_poses(clone=False)[0]

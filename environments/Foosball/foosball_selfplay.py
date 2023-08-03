@@ -46,7 +46,7 @@ class FoosballSelfPlay(FoosballTask):
         op_actions = tuple([
             torch.atleast_2d(
                 self.agents[i].get_action(
-                    {"obs": inverted_obs["obs"][
+                    {"obs": inverted_obs[
                         self.opponent_obs_ranges[i]:self.opponent_obs_ranges[i + 1],
                         ...
                     ]}
@@ -56,10 +56,11 @@ class FoosballSelfPlay(FoosballTask):
         ])
         return torch.cat((actions, torch.cat(op_actions, 0)), 1)
 
-    @staticmethod
-    def _invert_obs(obs):
-        inverted_obs = copy.copy(obs)
-        inverted_obs['obs'] = -inverted_obs['obs']
+    # @staticmethod
+    def _invert_obs(self, obs):
+        obs = obs['obs']
+        inverted_obs = obs[..., self.inverted_obs_indices]
+        inverted_obs[..., -4:] = -inverted_obs[..., -4:]
         return inverted_obs  # TODO: Implement
 
     def get_observations(self) -> dict:
@@ -111,6 +112,7 @@ class FoosballSelfPlay(FoosballTask):
     def post_reset(self):
         # first half of actions are white, second are black
         self.active_dofs = self._order_joints()
+        self.inverted_obs_indices = [4,5,6,7,0,1,2,3,12,13,14,15,8,9,10,11,20,21,22,23,16,17,18,19,28,29,30,31,24,25,26,27,32,33,34,35]
         super().post_reset()
 
     def reset(self):
@@ -137,4 +139,5 @@ class FoosballSelfPlay(FoosballTask):
         return torch.cat((actions, actions), 1)
 
     def update_weights(self, indices, weights):
-        self.agents[indices].set_weights(weights)
+        for i in indices:
+            self.agents[i%self.num_opponents].set_weights(weights)
