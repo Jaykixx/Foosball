@@ -67,15 +67,15 @@ params:
     schedule_type: legacy
     kl_threshold: 0.008
     score_to_win: 10000000
-    max_epochs: ${resolve_default:1500,${....max_iterations}}
+    max_epochs: ${resolve_default:3000,${....max_iterations}}
     save_best_after: 100
     save_frequency: 200
     grad_norm: 1.0
     entropy_coef: 0.0
     truncate_grads: True
     e_clip: 0.2
-    horizon_length: 160
-    minibatch_size: 163840
+    horizon_length: 16
+    minibatch_size: 16384
     mini_epochs: 8
     critic_coef: 4
     clip_value: True
@@ -83,7 +83,7 @@ params:
     bounds_loss_coef: 0.0001
 
     self_play_config:
-      update_score: 0.1
+      update_score: 0
       games_to_check: 50
       env_update_num: 1
 

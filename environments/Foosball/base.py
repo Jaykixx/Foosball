@@ -159,7 +159,7 @@ class FoosballTask(RLTask):
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
 
-        # self.actions = actions.clone().to(self.device)
+        self.actions = actions[..., :self._num_actions]  # .clone().to(self.device)
 
         # self._robots.set_joint_velocity_targets(
         #     actions * self._robot_vel_limit[:, self.active_dofs], joint_indices=self.active_dofs
@@ -205,19 +205,26 @@ class FoosballTask(RLTask):
 
         mask_y = torch.min(-0.08 < pos[:, 1], pos[:, 1] < 0.08)
 
+        dist_goal_w = torch.sqrt(torch.pow(pos[:, 0] - 0.62, 2) + torch.pow(pos[:, 1], 2))
+        dist_goal_b = torch.sqrt(torch.pow(pos[:, 0] + 0.62, 2) + torch.pow(pos[:, 1], 2))
+
+        # Regularization of actions
+        action_penalty = torch.sum(self.actions ** 2, dim=-1)
+        self.rew_buf[:] = 1e-3 * (dist_goal_w - dist_goal_b) - 1e-3 * action_penalty
+
         # Check white goal hit
         mask_x = 0.62 < pos[:, 0]
         loss_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[loss_mask] = -1
+        self.rew_buf[loss_mask] += -1
 
         # Check black goal hit
         mask_x = pos[:, 0] < -0.62
         win_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[win_mask] = 1
+        self.rew_buf[win_mask] += 1
 
         # Neither win or loss
         neutral_mask = ~torch.max(win_mask, loss_mask)
-        self.rew_buf[neutral_mask] = 0
+        self.rew_buf[neutral_mask] += 0
 
         # Check Termination penalty
         # limit = self._init_ball_position[0, 2] + self.termination_height

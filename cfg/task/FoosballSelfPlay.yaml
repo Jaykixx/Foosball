@@ -20,7 +20,7 @@ env:
   terminationHeight: 0.1
   terminationPenalty: 0
 
-  num_opponents: 2
+  num_opponents: 1
 
 sim:
   dt: 0.0083  # 0.004167 = 240 Hz - 0.0083 = 120 Hz

@@ -35,7 +35,7 @@ solver_type: 1 # 0: pgs, 1: tgs
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
 test: False
 # used to set checkpoint path
-checkpoint: ''  # 'runs\FrankaPushCube\nn\FrankaPushCube.pth'
+checkpoint: ''  # runs\FoosballSelfPlay\nn\FoosballSelfPlay.pth
 
 # disables rendering
 headless: True
