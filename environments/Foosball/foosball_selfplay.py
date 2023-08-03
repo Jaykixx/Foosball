@@ -6,6 +6,7 @@ from environments.Foosball.base import FoosballTask
 
 from utils.custom_runner import CustomRunner as Runner
 
+
 class FoosballSelfPlay(FoosballTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
@@ -17,16 +18,43 @@ class FoosballSelfPlay(FoosballTask):
         self.reset_position_noise = self._task_cfg["env"]["resetPositionNoise"]
         self.reset_velocity_noise = self._task_cfg["env"]["resetVelocityNoise"]
 
+        self.num_opponents = self._task_cfg["env"].get("num_opponents", 1)
+        self.opponent_obs_ranges = [
+            i * self._num_envs // self.num_opponents for
+            i in range(self.num_opponents + 1)
+        ]
+
         # on reset there are no observations available
         self._full_actions = self._duplicate_actions
 
-        self.agent = None
+        self.agents = None
 
     def add_opponent_action(self, actions):
         inverted_obs = self._invert_obs(self.obs_bufs)
-        op_actions = torch.atleast_2d(self.agent.get_action(inverted_obs))
 
-        return torch.cat((actions, op_actions), 1)
+        # op_actions = ()
+        # d = inverted_obs
+        # for i in range(self.num_opponents):
+        #     d["obs"] = inverted_obs["obs"][
+        #                     self.opponent_obs_ranges[i]:self.opponent_obs_ranges[i+1],
+        #                     ...
+        #                 ]
+        #     op_actions = op_actions + (
+        #         torch.atleast_2d(self.agents[0].get_action(d)),
+        #     )
+
+        op_actions = tuple([
+            torch.atleast_2d(
+                self.agents[i].get_action(
+                    {"obs": inverted_obs["obs"][
+                        self.opponent_obs_ranges[i]:self.opponent_obs_ranges[i + 1],
+                        ...
+                    ]}
+                )
+            )
+            for i in range(self.num_opponents)
+        ])
+        return torch.cat((actions, torch.cat(op_actions, 0)), 1)
 
     @staticmethod
     def _invert_obs(obs):
@@ -86,16 +114,17 @@ class FoosballSelfPlay(FoosballTask):
         super().post_reset()
 
     def reset(self):
-        if self.agent is None:
+        if self.agents is None:
             self.create_agent(self._cfg['train'])
         super().reset()
 
     def create_agent(self, config) -> None:
-        runner = Runner()
-        runner.load(config)
+        r = Runner()
+        r.load(config)
+        # create opponents in eval mode
+        r.params["opponent"] = True
 
-        self.agent = runner.create_player()
-        self.agent.model.eval()
+        self.agents = [r.create_player() for _ in range(self.num_opponents)]
 
     def prepare_opponent(self):
         self._full_actions = self.add_opponent_action
@@ -108,4 +137,4 @@ class FoosballSelfPlay(FoosballTask):
         return torch.cat((actions, actions), 1)
 
     def update_weights(self, indices, weights):
-        self.agent.set_weights(weights)
+        self.agents[indices].set_weights(weights)

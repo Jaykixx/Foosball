@@ -19,6 +19,8 @@ class A2CPlayer(PpoPlayerContinuous):
         PpoPlayerContinuous.__init__(self, params)
         if hasattr(self.model, "init_tensors"):
             self.model.init_tensors(self.device)
+        if params.get("opponent", False):
+            self.model.eval()
 
     @property
     def _env_progress_buffer(self):
