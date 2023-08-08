@@ -143,7 +143,7 @@ class FoosballTask(RLTask):
     def reset_ball(self, env_ids):
         indices = env_ids.to(dtype=torch.int32)
         init_ball_pos = self._init_ball_position[env_ids].clone()
-        # init_ball_pos[..., 1] += 0.3
+        init_ball_pos[..., 1] += 0.3
         self._balls.set_world_poses(
             init_ball_pos + self._env_pos[env_ids], indices=indices
         )
@@ -208,19 +208,24 @@ class FoosballTask(RLTask):
         dist_goal_w = torch.sqrt(torch.pow(pos[:, 0] - 0.62, 2) + torch.pow(pos[:, 1], 2))
         dist_goal_b = torch.sqrt(torch.pow(pos[:, 0] + 0.62, 2) + torch.pow(pos[:, 1], 2))
 
+        dist_goal_w = torch.exp(-dist_goal_w / 0.5)**2
+        dist_goal_b = torch.exp(-dist_goal_b / 0.5)**2
+
         # Regularization of actions
-        action_penalty = torch.sum(self.actions ** 2, dim=-1)
-        self.rew_buf[:] = 1e-3 * (dist_goal_w - dist_goal_b) - 1e-3 * action_penalty
+        # action_penalty = torch.sum(self.actions ** 2, dim=-1)
+        self.rew_buf[:] = 1e-3 * (dist_goal_w - dist_goal_b)  #  - 1e-3 * action_penalty
 
         # Check white goal hit
         mask_x = 0.62 < pos[:, 0]
         loss_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[loss_mask] += -1
+        multiplier = self._max_episode_length - self.progress_buf[loss_mask]
+        self.rew_buf[loss_mask] += (-1 + self.rew_buf[loss_mask]) * multiplier
 
         # Check black goal hit
         mask_x = pos[:, 0] < -0.62
         win_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[win_mask] += 1
+        multiplier = self._max_episode_length - self.progress_buf[win_mask]
+        self.rew_buf[win_mask] += (1 + self.rew_buf[win_mask]) * multiplier
 
         # Neither win or loss
         neutral_mask = ~torch.max(win_mask, loss_mask)
