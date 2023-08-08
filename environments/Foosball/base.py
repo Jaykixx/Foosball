@@ -245,6 +245,8 @@ class FoosballTask(RLTask):
         mask_z = pos[:, 2] > limit
         goal_mask = torch.max(goal_mask, mask_z)
 
+        self.extras["battle_won"] = goal_mask * torch.sign(pos[:, 0])
+
         # Check for episode length
         length_mask = self.progress_buf >= self._max_episode_length
         self.reset_buf = torch.max(goal_mask, length_mask)
