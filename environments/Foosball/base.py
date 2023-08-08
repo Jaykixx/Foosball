@@ -199,6 +199,10 @@ class FoosballTask(RLTask):
         )
         self.reset_idx(indices)
 
+        self.extras["battle_won"] = torch.zeros(self._num_envs,
+                                                device=self._device,
+                                                dtype=torch.long)
+
     def calculate_metrics(self) -> None:
         pos = self._balls.get_world_poses(clone=False)[0]
         pos = pos - self._env_pos
@@ -231,6 +235,10 @@ class FoosballTask(RLTask):
         neutral_mask = ~torch.max(win_mask, loss_mask)
         self.rew_buf[neutral_mask] += 0
 
+        self.extras["battle_won"] = torch.zeros_like(self.extras["battle_won"])
+        self.extras["battle_won"][win_mask] = 1
+        self.extras["battle_won"][loss_mask] = -1
+
         # Check Termination penalty
         # limit = self._init_ball_position[0, 2] + self.termination_height
         # mask_z = pos[:, 2] > limit
@@ -249,8 +257,6 @@ class FoosballTask(RLTask):
         limit = self._init_ball_position[0, 2] + self.termination_height
         mask_z = pos[:, 2] > limit
         goal_mask = torch.max(goal_mask, mask_z)
-
-        self.extras["battle_won"] = goal_mask * torch.sign(pos[:, 0])
 
         # Check for episode length
         length_mask = self.progress_buf >= self._max_episode_length
