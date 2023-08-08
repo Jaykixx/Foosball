@@ -86,6 +86,7 @@ params:
       update_score: 0
       games_to_check: 50
       env_update_num: 1
+      check_scores: True
 
     env_config:
       name: foosball_self_play_v0
