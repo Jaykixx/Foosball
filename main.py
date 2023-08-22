@@ -7,7 +7,7 @@ import hydra
 from omegaconf import DictConfig
 
 from rl_games.common import env_configurations, vecenv
-from rl_games.torch_runner import Runner
+from utils.custom_runner import CustomRunner as Runner
 import os
 import datetime
 
@@ -44,14 +44,6 @@ class RLGTrainer():
     def run(self):
         # create runner and set the settings
         runner = Runner(RLGPUAlgoObserver())
-
-        # Override builder for compatibility
-        runner.algo_factory.register_builder(
-            'a2c_continuous', lambda **kwargs: agents.A2CAgent(**kwargs)
-        )
-        runner.player_factory.register_builder(
-            'a2c_continuous', lambda **kwargs: players.A2CPlayer(**kwargs)
-        )
 
         runner.load(self.rlg_config_dict)
         runner.reset()

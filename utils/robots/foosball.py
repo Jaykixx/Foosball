@@ -30,11 +30,8 @@ class Foosball(Robot):
 
         if self._usd_path is None:
             root_dir = os.path.dirname(os.path.abspath(__file__))
-            # self._usd_path = os.path.join(
-            #     root_dir, "../../environments/Foosball/Models/Foosball_v2_Fully_Assembled.usd"
-            # )
             self._usd_path = os.path.join(
-                root_dir, "../../environments/Foosball/Models/Foosball_v5.usd"
+                root_dir, "../../environments/Foosball/Models/Foosball_Instanceable.usd"
             )
 
         self.reference = add_reference_to_stage(self._usd_path, prim_path)

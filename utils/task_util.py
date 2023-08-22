@@ -1,15 +1,44 @@
 def initialize_task(config, env, init_sim=True):
     from environments.Foosball.foosball_blocking import FoosballBlockingTask
     from environments.Foosball.foosball_goal_shot import FoosballGoalShotTask
-    from environments.Foosball.foosball import FoosballGame
+    from environments.Foosball.base import FoosballTask
     from environments.Foosball.foosball_selfplay import FoosballSelfPlay
+    # Default Environments
+    from omniisaacgymenvs.tasks.allegro_hand import AllegroHandTask
+    from omniisaacgymenvs.tasks.ant import AntLocomotionTask
+    from omniisaacgymenvs.tasks.anymal import AnymalTask
+    from omniisaacgymenvs.tasks.anymal_terrain import AnymalTerrainTask
+    from omniisaacgymenvs.tasks.ball_balance import BallBalanceTask
+    from omniisaacgymenvs.tasks.cartpole import CartpoleTask
+    from omniisaacgymenvs.tasks.factory.factory_task_nut_bolt_pick import FactoryTaskNutBoltPick
+    from omniisaacgymenvs.tasks.franka_cabinet import FrankaCabinetTask
+    from omniisaacgymenvs.tasks.humanoid import HumanoidLocomotionTask
+    from omniisaacgymenvs.tasks.ingenuity import IngenuityTask
+    from omniisaacgymenvs.tasks.quadcopter import QuadcopterTask
+    from omniisaacgymenvs.tasks.shadow_hand import ShadowHandTask
+    from omniisaacgymenvs.tasks.crazyflie import CrazyflieTask
 
     # Mappings from strings to environments
     task_map = {
         "FoosballBlocking": FoosballBlockingTask,
         "FoosballGoalShot": FoosballGoalShotTask,
-        "Foosball": FoosballGame,
-        "FoosballSelfPlay": FoosballSelfPlay
+        "Foosball": FoosballTask,
+        "FoosballSelfPlay": FoosballSelfPlay,
+        "AllegroHand": AllegroHandTask,
+        "Ant": AntLocomotionTask,
+        "Anymal": AnymalTask,
+        "AnymalTerrain": AnymalTerrainTask,
+        "BallBalance": BallBalanceTask,
+        "Cartpole": CartpoleTask,
+        "FactoryTaskNutBoltPick": FactoryTaskNutBoltPick,
+        "FrankaCabinet": FrankaCabinetTask,
+        "Humanoid": HumanoidLocomotionTask,
+        "Ingenuity": IngenuityTask,
+        "Quadcopter": QuadcopterTask,
+        "Crazyflie": CrazyflieTask,
+        "ShadowHand": ShadowHandTask,
+        "ShadowHandOpenAI_FF": ShadowHandTask,
+        "ShadowHandOpenAI_LSTM": ShadowHandTask
     }
 
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig
