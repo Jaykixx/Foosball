@@ -5,6 +5,7 @@ import torch
 from environments.Foosball.base import FoosballTask
 
 from utils.custom_runner import CustomRunner as Runner
+import time
 
 
 class FoosballSelfPlay(FoosballTask):
@@ -30,53 +31,44 @@ class FoosballSelfPlay(FoosballTask):
         self.agents = None
 
     def add_opponent_action(self, actions):
-        inverted_obs = self._invert_obs(self.obs_bufs)
-
-        # op_actions = ()
-        # d = inverted_obs
-        # for i in range(self.num_opponents):
-        #     d["obs"] = inverted_obs["obs"][
-        #                     self.opponent_obs_ranges[i]:self.opponent_obs_ranges[i+1],
-        #                     ...
-        #                 ]
-        #     op_actions = op_actions + (
-        #         torch.atleast_2d(self.agents[0].get_action(d)),
-        #     )
-
         op_actions = tuple([
             torch.atleast_2d(
                 self.agents[i].get_action(
-                    {"obs": inverted_obs[
+                    {"obs": self.inv_obs_buf[
                         self.opponent_obs_ranges[i]:self.opponent_obs_ranges[i + 1],
                         ...
                     ]}
-                )
+                ).detach()
             )
             for i in range(self.num_opponents)
         ])
         return torch.cat((actions, torch.cat(op_actions, 0)), 1)
 
-    # @staticmethod
-    def _invert_obs(self, obs):
-        obs = obs['obs']
-        inverted_obs = obs[..., self.inverted_obs_indices]
-        inverted_obs[..., -4:] = -inverted_obs[..., -4:]
-        return inverted_obs  # TODO: Implement
+    def cleanup(self) -> None:
+        super().cleanup()
+        self.inv_obs_buf = torch.zeros_like(self.obs_buf)
 
     def get_observations(self) -> dict:
         # TODO: Normalize?
-        fig_pos = self._robots.get_joint_positions(clone=False)
-        fig_vel = self._robots.get_joint_velocities(clone=False)
+        fig_pos = self._robots.get_joint_positions(joint_indices=self.active_dofs, clone=False)
+        fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_dofs, clone=False)
+        fig_pos_w = fig_pos[:, :self.num_actions]
+        fig_pos_b = fig_pos[:, self.num_actions:]
+        fig_vel_w = fig_vel[:, :self.num_actions]
+        fig_vel_b = fig_vel[:, self.num_actions:]
 
         # Observe game ball in x-, y-axis
-        ball_pos = self._balls.get_world_poses(clone=False)[0]
-        ball_pos = ball_pos[:, :2] - self._env_pos[:, :2]
+        ball_w_pos = self._balls.get_world_poses(clone=False)[0]
+        ball_pos = ball_w_pos[:, :2] - self._env_pos[:, :2]
         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
 
-        self.obs_buf[..., 0:16] = fig_pos
-        self.obs_buf[..., 16:32] = fig_vel
-        self.obs_buf[..., 32:34] = ball_pos
-        self.obs_buf[..., 34:36] = ball_vel
+        self.obs_buf = torch.cat(
+            (fig_pos_w, fig_pos_b, fig_vel_w, fig_vel_b, ball_pos, ball_vel), dim=-1
+        )
+
+        self.inv_obs_buf = torch.cat(
+            (fig_pos_b, fig_pos_w, fig_vel_b, fig_vel_w, -ball_pos, -ball_vel), dim=-1
+        ).clone()
 
         observations = {
             self._robots.name: {
@@ -86,24 +78,7 @@ class FoosballSelfPlay(FoosballTask):
         return observations
 
     def _order_joints(self) -> list:
-        joints = [
-                'Keeper_W_PrismaticJoint',
-                'Keeper_W_RevoluteJoint',
-                'Defense_W_PrismaticJoint',
-                'Defense_W_RevoluteJoint',
-                'Mid_W_PrismaticJoint',
-                'Mid_W_RevoluteJoint',
-                'Offense_W_PrismaticJoint',
-                'Offense_W_RevoluteJoint',
-                'Keeper_B_PrismaticJoint',
-                'Keeper_B_RevoluteJoint',
-                'Defense_B_PrismaticJoint',
-                'Defense_B_RevoluteJoint',
-                'Mid_B_PrismaticJoint',
-                'Mid_B_RevoluteJoint',
-                'Offense_B_PrismaticJoint',
-                'Offense_B_RevoluteJoint'
-            ]
+        joints = self.robot.dof_paths_W + self.robot.dof_paths_B
         active_dofs = []
         for j in joints:
             active_dofs.append(self._robots.get_dof_index(j))
@@ -112,7 +87,6 @@ class FoosballSelfPlay(FoosballTask):
     def post_reset(self):
         # first half of actions are white, second are black
         self.active_dofs = self._order_joints()
-        self.inverted_obs_indices = [4,5,6,7,0,1,2,3,12,13,14,15,8,9,10,11,20,21,22,23,16,17,18,19,28,29,30,31,24,25,26,27,32,33,34,35]
         super().post_reset()
 
     def reset(self):

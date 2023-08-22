@@ -192,7 +192,8 @@ class CustomA2CBase(A2CBase):
             env_done_indices = self.dones.view(self.num_actors, self.num_agents).all(dim=1).nonzero(as_tuple=False)
 
             self.game_rewards.update(self.current_rewards[env_done_indices])
-            self.game_scores.update(infos["battle_won"][env_done_indices])
+            if self.has_self_play_config:
+                self.game_scores.update(infos["battle_won"][env_done_indices])
             self.game_lengths.update(self.current_lengths[env_done_indices])
             self.algo_observer.process_infos(infos, env_done_indices)
 
