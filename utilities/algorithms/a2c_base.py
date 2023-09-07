@@ -2,7 +2,7 @@ from rl_games.common.a2c_common import *
 from rl_games.common.experience import ExperienceBuffer
 from rl_games.algos_torch import torch_ext
 
-from utils.models import model_builder
+from utilities.models import model_builder
 
 import numpy as np
 import torch

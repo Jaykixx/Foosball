@@ -9,12 +9,12 @@ import hydra
 from omegaconf import DictConfig
 
 from rl_games.common import env_configurations, vecenv
-from utils.custom_runner import CustomRunner as Runner
+from utilities.custom_runner import CustomRunner as Runner
 import os
 import datetime
 
 from environments.env_base import CustomVecEnvRLGames
-from utils.task_util import initialize_task
+from utilities.task_util import initialize_task
 
 
 class RLGTrainer:

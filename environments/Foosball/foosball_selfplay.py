@@ -4,7 +4,7 @@ import torch
 
 from environments.Foosball.base import FoosballTask
 
-from utils.custom_runner import CustomRunner as Runner
+from utilities.custom_runner import CustomRunner as Runner
 import time
 
 
@@ -12,7 +12,13 @@ class FoosballSelfPlay(FoosballTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
         self._num_agents = 2
-        self._num_actions = 8
+        if not hasattr(self, "_num_actions"):
+            self._num_actions = 8
+        if not hasattr(self, "_dof"):
+            self._dof = 2 * self._num_actions
+        if not hasattr(self, "_num_observations"):
+            self._num_observations = 2 * self._dof + 4
+
         super().__init__(name, sim_config, env, offset)
 
         # Reset parameters
@@ -75,6 +81,9 @@ class FoosballSelfPlay(FoosballTask):
                 "obs_buf": self.obs_buf
             }
         }
+
+        if self.capture:
+            self.capture_image()
         return observations
 
     def _order_joints(self) -> list:

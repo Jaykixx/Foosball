@@ -7,9 +7,9 @@ from omniisaacgymenvs.tasks.base.rl_task import RLTask
 from omni.isaac.core.materials import PhysicsMaterial
 from omni.isaac.core.prims import RigidPrimView
 from omni.isaac.core.utils.torch.maths import *
-from utils.robots.foosball import Foosball
+from utilities.robots.foosball import Foosball
 import omni.replicator.core as rep
-from pxr import PhysxSchema
+from pxr import PhysxSchema, UsdPhysics, Usd, UsdGeom
 from PIL import Image
 import numpy as np
 import torch
@@ -54,14 +54,16 @@ class FoosballTask(RLTask):
 
         super(FoosballTask, self).__init__(name, env, offset)
 
+        self.old_actions = torch.zeros((self.num_envs, self._dof), device=self._device)
+
     def set_up_scene(self, scene) -> None:
+        # physxSceneAPI = PhysxSchema.PhysxSceneAPI.Apply(get_prim_at_path('/physicsScene'))
+        # physxSceneAPI.CreateEnableCCDAttr().Set(True)
+
         self.get_game_table()
         self.get_game_ball()
 
         super().set_up_scene(scene)
-
-        # physxSceneAPI = PhysxSchema.PhysxSceneAPI.Apply(get_prim_at_path('/physicsScene'))
-        # physxSceneAPI.CreateEnableCCDAttr().Set(True)
 
         # Get robot articulations
         self._robots = ArticulationView(
@@ -71,7 +73,7 @@ class FoosballTask(RLTask):
 
         # Get ball view
         self._balls = RigidPrimView(
-            prim_paths_expr="/World/envs/env_.*/Ball", name="ball_view", reset_xform_properties=False
+            prim_paths_expr="/World/envs/env_.*/Foosball/Ball", name="ball_view", reset_xform_properties=False
         )
         scene.add(self._balls)
 
@@ -83,27 +85,8 @@ class FoosballTask(RLTask):
         self.rev_joints = self.robot.dof_paths_rev
         self.pris_joints = self.robot.dof_paths_pris
 
-    # def get_game_ball(self) -> None:
-    #     ball_path = self.default_zero_env_path + "/Ball"
-    #     self._ball_radius = 0.01725
-    #     self._sim_config.apply_articulation_settings(
-    #         "Ball", get_prim_at_path(ball_path),
-    #         self._sim_config.parse_actor_config("Ball")
-    #     )
-
     def get_game_ball(self) -> None:
-        physics_material_path = find_unique_string_name(
-            initial_name="/World/Physics_Materials/physics_material",
-            is_unique_fn=lambda x: not is_prim_path_valid(x),
-        )
-        physics_material = PhysicsMaterial(
-            prim_path=physics_material_path,
-            dynamic_friction=0.2,
-            static_friction=0.2,
-            restitution=0.5,
-        )
-
-        ball_path = self.default_zero_env_path + "/Ball"
+        ball_path = self.default_zero_env_path + "/Foosball/Ball"
         self._init_ball_position = torch.tensor(
             [[0, 0, 0.79025]], device=self.device
         ).repeat(self.num_envs, 1)
@@ -112,20 +95,50 @@ class FoosballTask(RLTask):
         ).repeat(self.num_envs, 1)
         self._init_ball_velocities = torch.zeros((self.num_envs, 6), device=self.device)
         self._ball_radius = 0.01725
-        self.ball = DynamicSphere(
-            prim_path=ball_path,
-            radius=self._ball_radius,
-            color=torch.tensor([255, 191, 0], device=self.device),
-            name="ball_0",
-            mass=0.023,
-            physics_material=physics_material
-        )
+
         self._sim_config.apply_articulation_settings(
             "Ball", get_prim_at_path(ball_path),
             self._sim_config.parse_actor_config("Ball")
         )
-        # physx_rb_api = self._sim_config._get_physx_rigid_body_api(self.ball.prim)
+
+        # physx_rb_api = self._sim_config._get_physx_rigid_body_api(get_prim_at_path(ball_path))
         # physx_rb_api.CreateEnableCCDAttr().Set(True)
+
+    # def get_game_ball(self) -> None:
+    #     physics_material_path = find_unique_string_name(
+    #         initial_name="/World/Physics_Materials/physics_material",
+    #         is_unique_fn=lambda x: not is_prim_path_valid(x),
+    #     )
+    #     physics_material = PhysicsMaterial(
+    #         prim_path=physics_material_path,
+    #         dynamic_friction=0.2,
+    #         static_friction=0.2,
+    #         restitution=0.5,
+    #     )
+    #
+    #     ball_path = self.default_zero_env_path + "/Ball"
+    #     self._init_ball_position = torch.tensor(
+    #         [[0, 0, 0.79025]], device=self.device
+    #     ).repeat(self.num_envs, 1)
+    #     self._init_ball_rotation = torch.tensor(
+    #         [[1, 0, 0, 0]], device=self.device
+    #     ).repeat(self.num_envs, 1)
+    #     self._init_ball_velocities = torch.zeros((self.num_envs, 6), device=self.device)
+    #     self._ball_radius = 0.01725
+    #     self.ball = DynamicSphere(
+    #         prim_path=ball_path,
+    #         radius=self._ball_radius,
+    #         color=torch.tensor([255, 191, 0], device=self.device),
+    #         name="ball_0",
+    #         mass=0.023,
+    #         physics_material=physics_material
+    #     )
+    #     self._sim_config.apply_articulation_settings(
+    #         "Ball", get_prim_at_path(ball_path),
+    #         self._sim_config.parse_actor_config("Ball")
+    #     )
+    #     # physx_rb_api = self._sim_config._get_physx_rigid_body_api(self.ball.prim)
+    #     # physx_rb_api.CreateEnableCCDAttr().Set(True)
 
     def get_observations(self) -> dict:
         # Observe figurines
@@ -183,41 +196,44 @@ class FoosballTask(RLTask):
         indices = env_ids.to(dtype=torch.int32)
         num_resets = len(env_ids)
 
-        # # Reset ball to randomized positions and velocities
-        # init_ball_pos = self._init_ball_position[env_ids].clone()
-        # init_ball_rot = self._init_ball_rotation[env_ids].clone()
-        # init_ball_pos[..., 1] -= 0.3
-        # self._balls.set_world_poses(init_ball_pos + self._env_pos[env_ids], init_ball_rot, indices=indices)
-        #
-        # init_ball_vel = self._init_ball_velocities[env_ids].clone()
-        # init_ball_vel[..., 0] = torch_rand_float(-3, 3, (num_resets, 1), self._device).squeeze()
-        # init_ball_vel[..., 1] = torch_rand_float(1, 5, (num_resets, 1), self._device).squeeze()
-        # init_ball_vel[..., 2:] = 0
-        # self._balls.set_velocities(init_ball_vel, indices=indices)
+        # Reset ball to randomized positions and velocities
+        sign = torch.sign(torch.rand(num_resets, device=self.device) - 0.5)
+        init_ball_pos = self._init_ball_position[env_ids].clone()
+        init_ball_rot = self._init_ball_rotation[env_ids].clone()
+        init_ball_pos[..., 1] -= sign * 0.3
+        self._balls.set_world_poses(init_ball_pos + self._env_pos[env_ids], init_ball_rot, indices=indices)
+
+        init_ball_vel = self._init_ball_velocities[env_ids].clone()
+        xvel = torch_rand_float(0.25, 1, (num_resets, 1), self._device).squeeze()
+        xsign = torch.sign(torch.rand(num_resets, device=self.device) - 0.5)
+        init_ball_vel[..., 0] = xsign * xvel
+        init_ball_vel[..., 1] = sign * torch_rand_float(1, 2, (num_resets, 1), self._device).squeeze()
+        init_ball_vel[..., 2:] = 0
+        self._balls.set_velocities(init_ball_vel, indices=indices)
 
         # Signs determines which goal is targeted
         # print("Reseting Environments.")
-        signs = torch.sign(torch.rand(num_resets, device=self.device) - 0.5)
-        # signs = 1
-        init_ball_pos = self._init_ball_position[env_ids].clone()
-        init_ball_rot = self._init_ball_rotation[env_ids].clone()
-        y_offset = torch_rand_float(-0.3, 0.3, (num_resets, 1), self._device).squeeze()
-        init_ball_pos[..., 1] += signs * y_offset
-        self._balls.set_world_poses(init_ball_pos + self._env_pos[env_ids], init_ball_rot, indices=indices)
-
-        init_ball_vel = self._init_ball_velocities[env_ids]
-        d1 = y_offset.abs() - 0.205 / 2 + 2 * self._ball_radius
-        d2 = y_offset.abs() + 0.205 / 2 - 2 * self._ball_radius
-        xd1 = torch.sqrt(25 / (1 + (d1 / 1.08) ** 2))
-        xd2 = torch.sqrt(25 / (1 + (d2 / 1.08) ** 2))
-        xd_min = torch.minimum(xd1, xd2)
-        xd_max = torch.maximum(xd1, xd2)
-        xd = torch.rand_like(xd_min, device=self._device) * (xd_max - xd_min) + xd_min
-        yd = - torch.sign(y_offset) * torch.sqrt(25 - xd ** 2)
-        init_ball_vel[..., 0] = signs * xd
-        init_ball_vel[..., 1] = signs * yd
-        init_ball_vel[..., 2:] = 0
-        self._balls.set_velocities(init_ball_vel, indices=indices)
+        # signs = torch.sign(torch.rand(num_resets, device=self.device) - 0.5)
+        # # signs = 1
+        # init_ball_pos = self._init_ball_position[env_ids].clone()
+        # init_ball_rot = self._init_ball_rotation[env_ids].clone()
+        # y_offset = torch_rand_float(-0.3, 0.3, (num_resets, 1), self._device).squeeze()
+        # init_ball_pos[..., 1] += signs * y_offset
+        # self._balls.set_world_poses(init_ball_pos + self._env_pos[env_ids], init_ball_rot, indices=indices)
+        #
+        # init_ball_vel = self._init_ball_velocities[env_ids]
+        # d1 = y_offset.abs() - 0.205 / 2 + 2 * self._ball_radius
+        # d2 = y_offset.abs() + 0.205 / 2 - 2 * self._ball_radius
+        # xd1 = torch.sqrt(25 / (1 + (d1 / 1.08) ** 2))
+        # xd2 = torch.sqrt(25 / (1 + (d2 / 1.08) ** 2))
+        # xd_min = torch.minimum(xd1, xd2)
+        # xd_max = torch.maximum(xd1, xd2)
+        # xd = torch.rand_like(xd_min, device=self._device) * (xd_max - xd_min) + xd_min
+        # yd = - torch.sign(y_offset) * torch.sqrt(25 - xd ** 2)
+        # init_ball_vel[..., 0] = signs * xd
+        # init_ball_vel[..., 1] = signs * yd
+        # init_ball_vel[..., 2:] = 0
+        # self._balls.set_velocities(init_ball_vel, indices=indices)
 
     def pre_physics_step(self, actions) -> None:
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
@@ -286,8 +302,9 @@ class FoosballTask(RLTask):
         dist_to_goal_rew = dist_to_goal_rew * 0  # torch.exp(-self.progress_buf / 100)
 
         # Regularization of actions
-        # action_penalty_w = torch.sum(self.actions[..., :self._num_actions] ** 2, dim=-1)
-        # # action_penalty_b = torch.sum(self.actions[..., self._num_actions:] ** 2, dim=-1)
+        # action_diff = self.actions - self.old_actions
+        # action_penalty_w = torch.sum(action_diff[..., :self._num_actions] ** 2, dim=-1)
+        # # action_penalty_b = torch.sum(action_diff[..., self._num_actions:] ** 2, dim=-1)
         # action_penalty = 1e-2 * (action_penalty_w)  # - action_penalty_b)
 
         reward = dist_to_goal_rew  # - action_penalty
@@ -305,18 +322,18 @@ class FoosballTask(RLTask):
 
         self.rew_buf = reward
 
-        mask_y = torch.min(-0.08 < pos[:, 1], pos[:, 1] < 0.08)
+        mask_y = torch.min(-0.0925 < pos[:, 1], pos[:, 1] < 0.0925)
 
         # Check white goal hit
-        mask_x = 0.62 < pos[:, 0]
+        mask_x = 0.61725 < pos[:, 0]
         loss_mask = torch.min(mask_x, mask_y)
         self.rew_buf[loss_mask] = -1000
 
         # Check black goal hit
-        mask_x = pos[:, 0] < -0.62
+        mask_x = pos[:, 0] < -0.61725
         win_mask = torch.min(mask_x, mask_y)
-        win_rew_mask = torch.min(win_mask, self.progress_buf > 12)
-        self.rew_buf[win_rew_mask] = 1000
+        # win_rew_mask = torch.min(win_mask, self.progress_buf > 12)
+        self.rew_buf[win_mask] = 1000
 
         # Check Termination penalty
         limit = self._init_ball_position[0, 2] + self.termination_height
@@ -335,6 +352,18 @@ class FoosballTask(RLTask):
         self.extras["battle_won"][win_mask] = 1
         self.extras["battle_won"][loss_mask] = -1
         self.extras["Games_finished_with_goals"] = goal_mask.sum() / self.reset_buf.sum()
+        self.extras["Wins"] = win_mask.sum() / self.reset_buf.sum()
+        self.extras["Losses"] = loss_mask.sum() / self.reset_buf.sum()
+
+        debug_cond_x = torch.max(pos[:, 0] < -0.71, pos[:, 0] > 0.71)
+        debug_cond_y = torch.max(pos[:, 1] < -0.367, pos[:, 1] > 0.367)
+        debug_cond_z = pos[:, 2] < 0.7
+        debug_cond = torch.max(torch.max(debug_cond_x, debug_cond_y), debug_cond_z)
+        debug_cond[goal_mask] = 0
+        self.reset_buf = torch.max(self.reset_buf, debug_cond)
+        self.extras["Ended in Glitch"] = debug_cond.sum()
+
+        self.old_actions = self.actions
 
     def is_done(self) -> None:
         # Is part of calculate_metrics for performance!

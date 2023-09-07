@@ -1,7 +1,7 @@
 from rl_games.torch_runner import Runner
 
-import utils.models.agents as agents
-import utils.models.players as players
+import utilities.models.agents as agents
+import utilities.models.players as players
 
 
 class CustomRunner(Runner):

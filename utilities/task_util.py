@@ -3,6 +3,7 @@ def initialize_task(config, env, init_sim=True):
     from environments.Foosball.foosball_goal_shot import FoosballGoalShotTask
     from environments.Foosball.base import FoosballTask
     from environments.Foosball.foosball_selfplay import FoosballSelfPlay
+    from environments.Foosball.foosball_keeper_selfplay import FoosballKeeperSelfPlay
     # Default Environments
     from omniisaacgymenvs.tasks.allegro_hand import AllegroHandTask
     from omniisaacgymenvs.tasks.ant import AntLocomotionTask
@@ -24,6 +25,7 @@ def initialize_task(config, env, init_sim=True):
         "FoosballGoalShot": FoosballGoalShotTask,
         "Foosball": FoosballTask,
         "FoosballSelfPlay": FoosballSelfPlay,
+        "FoosballKeeperSelfPlay": FoosballKeeperSelfPlay,
         "AllegroHand": AllegroHandTask,
         "Ant": AntLocomotionTask,
         "Anymal": AnymalTask,
