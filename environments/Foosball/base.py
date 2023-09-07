@@ -322,9 +322,14 @@ class FoosballTask(RLTask):
         self.extras["battle_won"][:] = 0
         self.extras["battle_won"][win_mask] = 1
         self.extras["battle_won"][loss_mask] = -1
-        self.extras["Games_finished_with_goals"] = goal_mask.sum() / self.reset_buf.sum()
-        self.extras["Wins"] = win_mask.sum() / self.reset_buf.sum()
-        self.extras["Losses"] = loss_mask.sum() / self.reset_buf.sum()
+        if self.reset_buf.sum() > 0:
+            self.extras["Games_finished_with_goals"] = goal_mask.sum() / self.reset_buf.sum()
+            self.extras["Wins"] = win_mask.sum() / self.reset_buf.sum()
+            self.extras["Losses"] = loss_mask.sum() / self.reset_buf.sum()
+        else:
+            self.extras["Games_finished_with_goals"] = 0
+            self.extras["Wins"] = 0
+            self.extras["Losses"] = 0
 
         debug_cond_x = torch.max(ball_pos[:, 0] < -0.71, ball_pos[:, 0] > 0.71)
         debug_cond_y = torch.max(ball_pos[:, 1] < -0.367, ball_pos[:, 1] > 0.367)
