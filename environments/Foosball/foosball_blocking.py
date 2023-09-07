@@ -72,30 +72,3 @@ class FoosballBlockingTask(FoosballTask):
     #     self._robots.set_joint_velocity_targets(
     #         actions, joint_indices=self.active_dofs
     #     )
-
-    def calculate_metrics(self) -> None:
-        pos = self._balls.get_world_poses(clone=False)[0]
-        pos = pos - self._env_pos
-
-        mask_y = torch.min(-0.0925 < pos[:, 1], pos[:, 1] < 0.0925)
-
-        self.rew_buf[:] = 0
-
-        # Check white goal hit
-        mask_x = 0.61 < pos[:, 0]
-        loss_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[loss_mask] = -1
-
-        # Check black goal hit
-        mask_x = pos[:, 0] < -0.61
-        win_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[win_mask] = 1
-
-        # Check Termination penalty
-        limit = self._init_ball_position[0, 2] + self.termination_height
-        termination_mask = pos[:, 2] > limit
-        self.rew_buf[termination_mask] = - self.termination_penalty
-        length_mask = self.progress_buf >= self._max_episode_length - 1
-        goal_mask = torch.max(win_mask, loss_mask)
-        self.reset_buf = torch.max(goal_mask, length_mask)
-        self.reset_buf = torch.max(self.reset_buf, termination_mask)

@@ -261,54 +261,55 @@ class FoosballTask(RLTask):
                                                 device=self._device,
                                                 dtype=torch.long)
 
-    def calculate_metrics(self) -> None:
-        pos = self._balls.get_world_poses(clone=False)[0]
-        pos = pos - self._env_pos
-
-        # Compute distance ball to goal reward
-        # dist_to_w_goal = torch.sqrt(torch.pow(pos[:, 0] - 0.62, 2) + torch.pow(pos[:, 1], 2))
-        dist_to_b_goal = torch.sqrt(torch.pow(pos[:, 0] + 0.62, 2) + torch.pow(pos[:, 1], 2))
-
-        dist_to_goal_rew = torch.exp(-dist_to_b_goal / 0.5) ** 3  # - torch.exp(-dist_to_w_goal / 0.5) ** 3
-        dist_to_goal_rew = dist_to_goal_rew * 0  # torch.exp(-self.progress_buf / 100)
-
+    def _compute_action_regularization(self):
         # Regularization of actions
-        # action_diff = self.actions - self.old_actions
-        # action_penalty_w = torch.sum(action_diff[..., :self._num_actions] ** 2, dim=-1)
-        # # action_penalty_b = torch.sum(action_diff[..., self._num_actions:] ** 2, dim=-1)
-        # action_penalty = 1e-2 * (action_penalty_w)  # - action_penalty_b)
+        action_diff = self.actions - self.old_actions
+        action_penalty_w = torch.sum(action_diff[..., :self._num_actions] ** 2, dim=-1)
+        # action_penalty_b = torch.sum(action_diff[..., self._num_actions:] ** 2, dim=-1)
+        return 1e-2 * action_penalty_w  # - action_penalty_b)
 
-        reward = dist_to_goal_rew  # - action_penalty
+    def _compute_ball_to_goal_distances(self, ball_pos):
+        # Compute distance ball to goal reward
+        z = torch.zeros_like(ball_pos[:, 1])
+        y_dist = torch.pow(torch.max(torch.abs(ball_pos[:, 1]) - 0.08525, z), 2)
+        x_dist_to_b_goal = torch.pow(ball_pos[:, 0] + 0.61725, 2)
+        x_dist_to_w_goal = torch.pow(ball_pos[:, 0] - 0.61725, 2)
+        dist_to_w_goal = torch.sqrt(x_dist_to_w_goal + y_dist)
+        dist_to_b_goal = torch.sqrt(x_dist_to_b_goal + y_dist)
 
+        return dist_to_b_goal, dist_to_w_goal
+
+    def _compute_fig_to_ball_distances(self, ball_pos):
         # Compute distance of figures to ball in y-direction
+        distances = []
         for joint, id in self.active_pris_joints.items():
             if joint in self.robot.dof_paths_W:
                 joint_pos = self._robots.get_joint_positions(joint_indices=[id], clone=False)
                 offsets = self.robot.figure_positions[joint.split('_')[0]]
                 fig_pos = - joint_pos.repeat(1, len(offsets)) + offsets.unsqueeze(0)
-                fig_pos_dist = torch.abs(fig_pos - pos[:, 1:2])
-                fig_pos_dist = torch.min(fig_pos_dist, dim=-1)[0]
-                fig_pos_rew = torch.exp(-fig_pos_dist / 0.08) * 1e-1
-                reward += fig_pos_rew
+                fig_pos_dist = torch.abs(fig_pos - ball_pos[:, 1:2])
+                distances.append(torch.min(fig_pos_dist, dim=-1)[0])
+        return distances
 
-        self.rew_buf = reward
+    def _calculate_metrics(self, ball_pos) -> None:
+        self.rew_buf[:] = 0
 
-        mask_y = torch.min(-0.0925 < pos[:, 1], pos[:, 1] < 0.0925)
+        mask_y = torch.min(-0.0925 < ball_pos[:, 1], ball_pos[:, 1] < 0.0925)
 
         # Check white goal hit
-        mask_x = 0.61725 < pos[:, 0]
+        mask_x = 0.61725 < ball_pos[:, 0]
         loss_mask = torch.min(mask_x, mask_y)
         self.rew_buf[loss_mask] = -1000
 
         # Check black goal hit
-        mask_x = pos[:, 0] < -0.61725
+        mask_x = ball_pos[:, 0] < -0.61725
         win_mask = torch.min(mask_x, mask_y)
         # win_rew_mask = torch.min(win_mask, self.progress_buf > 12)
         self.rew_buf[win_mask] = 1000
 
         # Check Termination penalty
         limit = self._init_ball_position[0, 2] + self.termination_height
-        mask_z = pos[:, 2] > limit
+        mask_z = ball_pos[:, 2] > limit
         self.rew_buf[mask_z] = - self.termination_penalty
 
         # Check done flags
@@ -324,13 +325,19 @@ class FoosballTask(RLTask):
         self.extras["Wins"] = win_mask.sum() / self.reset_buf.sum()
         self.extras["Losses"] = loss_mask.sum() / self.reset_buf.sum()
 
-        debug_cond_x = torch.max(pos[:, 0] < -0.71, pos[:, 0] > 0.71)
-        debug_cond_y = torch.max(pos[:, 1] < -0.367, pos[:, 1] > 0.367)
-        debug_cond_z = pos[:, 2] < 0.7
+        debug_cond_x = torch.max(ball_pos[:, 0] < -0.71, ball_pos[:, 0] > 0.71)
+        debug_cond_y = torch.max(ball_pos[:, 1] < -0.367, ball_pos[:, 1] > 0.367)
+        debug_cond_z = ball_pos[:, 2] < 0.7
         debug_cond = torch.max(torch.max(debug_cond_x, debug_cond_y), debug_cond_z)
         debug_cond[goal_mask] = 0
         self.reset_buf = torch.max(self.reset_buf, debug_cond)
         self.extras["Ended in Glitch"] = debug_cond.sum()
+
+    def calculate_metrics(self) -> None:
+        pos = self._balls.get_world_poses(clone=False)[0]
+        pos = pos - self._env_pos
+
+        self._calculate_metrics(pos)
 
         self.old_actions = self.actions
 

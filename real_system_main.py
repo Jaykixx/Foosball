@@ -15,9 +15,6 @@ import datetime
 from os import path
 import sys
 
-from environments.env_base import CustomVecEnvRLGames
-from utilities.task_util import initialize_task
-
 
 class SystemInterface:
     def __init__(self, cfg, cfg_dict):

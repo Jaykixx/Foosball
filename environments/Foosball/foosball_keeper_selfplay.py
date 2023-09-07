@@ -38,7 +38,9 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
         y_offset *= self.reset_position_noise
         init_ball_pos[:, 1] = sign * y_offset
         self._balls.set_world_poses(
-            init_ball_pos + self._env_pos[env_ids], self._init_ball_rotation[env_ids].clone(), indices=indices
+            init_ball_pos + self._env_pos[env_ids],
+            self._init_ball_rotation[env_ids].clone(),
+            indices=indices
         )
 
         # # Choose random batch to start with a moving ball
@@ -104,69 +106,23 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
             self.capture_image()
         return observations
 
-    def calculate_metrics(self) -> None:
-        pos = self._balls.get_world_poses(clone=False)[0]
-        pos = pos - self._env_pos
+    def _calculate_metrics(self, ball_pos) -> None:
+        super()._calculate_metrics(ball_pos)
+
         vel = self._balls.get_velocities(clone=False)[:, :2]
         vel = torch.norm(vel, 2, dim=-1)
 
-        self.rew_buf[:] = 0
-
         # Award closeness to opponent goal
-        dist_to_b_goal = torch.sqrt(torch.pow(pos[:, 0] + 0.62, 2) + torch.pow(pos[:, 1], 2))
+        dist_to_b_goal, _ = self._compute_ball_to_goal_distances(ball_pos)
         dist_to_goal_rew = torch.exp(-6*dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
-        self.rew_buf[:] = dist_to_goal_rew
+        self.rew_buf += dist_to_goal_rew
 
         # Regularization of actions
-        action_diff = self.actions - self.old_actions
-        action_penalty_w = torch.sum(action_diff[..., :self._num_actions] ** 2, dim=-1)
-        # action_penalty_b = torch.sum(action_diff[..., self._num_actions:] ** 2, dim=-1)
-        self.rew_buf[:] = - 1e-2 * action_penalty_w
+        self.rew_buf += self._compute_action_regularization()
 
         dof = [self._robots.get_dof_index("Keeper_W_PrismaticJoint")]
         fig_pos = self._robots.get_joint_positions(joint_indices=dof, clone=False)
-        pull_fig_mask = torch.min(pos[:, 0] > 0, vel < 0.1)
-        fig_pos_dist = torch.abs(fig_pos - pos[:, 1:2])
+        pull_fig_mask = torch.min(ball_pos[:, 0] > 0, vel < 0.1)
+        fig_pos_dist = torch.abs(fig_pos - ball_pos[:, 1:2])
         fig_pos_rew = torch.exp(-fig_pos_dist / 0.08)
         self.rew_buf[pull_fig_mask] = - (1 - fig_pos_rew[pull_fig_mask])
-
-        mask_y = torch.min(-0.0925 < pos[:, 1], pos[:, 1] < 0.0925)
-
-        # Check white goal hit
-        mask_x = 0.61 < pos[:, 0]
-        loss_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[loss_mask] = -1000
-
-        # Check black goal hit
-        mask_x = pos[:, 0] < -0.61
-        win_mask = torch.min(mask_x, mask_y)
-        win_rew_mask = torch.min(win_mask, self.progress_buf > 9)
-        self.rew_buf[win_rew_mask] = 1000
-
-        # Check Termination penalty
-        limit = self._init_ball_position[0, 2] + self.termination_height
-        mask_z = pos[:, 2] > limit
-        self.rew_buf[mask_z] = - self.termination_penalty
-
-        # Check done flags
-        goal_mask = torch.max(win_mask, loss_mask)
-        length_mask = self.progress_buf >= self._max_episode_length - 1
-        limit = self._init_ball_position[0, 2] + self.termination_height
-        termination_mask = pos[:, 2] > limit
-        self.reset_buf = torch.max(goal_mask, length_mask)
-        self.reset_buf = torch.max(self.reset_buf, termination_mask)
-
-        self.extras["battle_won"][:] = 0
-        self.extras["battle_won"][win_mask] = 1
-        self.extras["battle_won"][loss_mask] = -1
-        self.extras["Games_finished_with_goals"] = goal_mask.sum() / self.reset_buf.sum()
-        self.extras["Wins"] = win_mask.sum() / self.reset_buf.sum()
-        self.extras["Losses"] = loss_mask.sum() / self.reset_buf.sum()
-
-        debug_cond_x = torch.max(pos[:, 0] < -0.71, pos[:, 0] > 0.71)
-        debug_cond_y = torch.max(pos[:, 1] < -0.367, pos[:, 1] > 0.367)
-        debug_cond_z = pos[:, 2] < 0.7
-        debug_cond = torch.min(torch.min(debug_cond_x, debug_cond_y), debug_cond_z)
-        debug_cond[goal_mask] = 0
-        self.reset_buf = torch.max(self.reset_buf, debug_cond)
-        self.extras["Ended in Glitch"] = debug_cond.sum()
