@@ -3,6 +3,7 @@ from omni.isaac.core.objects import DynamicSphere, DynamicCuboid
 from omni.isaac.core.utils.stage import get_current_stage
 from omni.isaac.core.utils.prims import get_prim_at_path, is_prim_path_valid
 from omni.isaac.core.utils.string import find_unique_string_name
+from omni.kit.viewport.utility import get_viewport_from_window_name
 from omniisaacgymenvs.tasks.base.rl_task import RLTask
 from omni.isaac.core.materials import PhysicsMaterial
 from omni.isaac.core.prims import RigidPrimView
@@ -56,10 +57,16 @@ class FoosballTask(RLTask):
 
         self.old_actions = torch.zeros((self.num_envs, self._dof), device=self._device)
 
-    def set_up_scene(self, scene) -> None:
-        # physxSceneAPI = PhysxSchema.PhysxSceneAPI.Apply(get_prim_at_path('/physicsScene'))
-        # physxSceneAPI.CreateEnableCCDAttr().Set(True)
+    def set_initial_camera_params(self, camera_position=(0, 0, 10),
+                                  camera_target=(0, 0, 0)):
+        if not self.headless:
+            viewport_api_2 = get_viewport_from_window_name("Viewport")
+            viewport_api_2.set_active_camera("/World/envs/env_0/Foosball/Top_Down_Camera")
+        else:
+            super().set_initial_camera_params(camera_position=camera_position,
+                                              camera_target=camera_target)
 
+    def set_up_scene(self, scene) -> None:
         self.get_game_table()
         self.get_game_ball()
 
@@ -103,42 +110,6 @@ class FoosballTask(RLTask):
 
         # physx_rb_api = self._sim_config._get_physx_rigid_body_api(get_prim_at_path(ball_path))
         # physx_rb_api.CreateEnableCCDAttr().Set(True)
-
-    # def get_game_ball(self) -> None:
-    #     physics_material_path = find_unique_string_name(
-    #         initial_name="/World/Physics_Materials/physics_material",
-    #         is_unique_fn=lambda x: not is_prim_path_valid(x),
-    #     )
-    #     physics_material = PhysicsMaterial(
-    #         prim_path=physics_material_path,
-    #         dynamic_friction=0.2,
-    #         static_friction=0.2,
-    #         restitution=0.5,
-    #     )
-    #
-    #     ball_path = self.default_zero_env_path + "/Ball"
-    #     self._init_ball_position = torch.tensor(
-    #         [[0, 0, 0.79025]], device=self.device
-    #     ).repeat(self.num_envs, 1)
-    #     self._init_ball_rotation = torch.tensor(
-    #         [[1, 0, 0, 0]], device=self.device
-    #     ).repeat(self.num_envs, 1)
-    #     self._init_ball_velocities = torch.zeros((self.num_envs, 6), device=self.device)
-    #     self._ball_radius = 0.01725
-    #     self.ball = DynamicSphere(
-    #         prim_path=ball_path,
-    #         radius=self._ball_radius,
-    #         color=torch.tensor([255, 191, 0], device=self.device),
-    #         name="ball_0",
-    #         mass=0.023,
-    #         physics_material=physics_material
-    #     )
-    #     self._sim_config.apply_articulation_settings(
-    #         "Ball", get_prim_at_path(ball_path),
-    #         self._sim_config.parse_actor_config("Ball")
-    #     )
-    #     # physx_rb_api = self._sim_config._get_physx_rigid_body_api(self.ball.prim)
-    #     # physx_rb_api.CreateEnableCCDAttr().Set(True)
 
     def get_observations(self) -> dict:
         # Observe figurines
@@ -269,7 +240,7 @@ class FoosballTask(RLTask):
         self.dof_offset = (limits[..., 1] - limits[..., 0]) / 2 + limits[..., 0]
 
         rev_joints = {name: self._robots.get_dof_index(name) for name in self.rev_joints}
-        inactive_rev_joints = [joint for joint in rev_joints.values() if joint not in self.active_dofs]
+        inactive_rev_joints = [joint for joint in rev_joints.values() if joint not in (self.active_dofs + self.obstacle_dofs)]
 
         pris_joints = {name: self._robots.get_dof_index(name) for name in self.pris_joints}
         self.active_pris_joints = {key: value for key, value in pris_joints.items() if value in self.active_dofs}
@@ -343,10 +314,8 @@ class FoosballTask(RLTask):
         # Check done flags
         goal_mask = torch.max(win_mask, loss_mask)
         length_mask = self.progress_buf >= self._max_episode_length - 1
-        limit = self._init_ball_position[0, 2] + self.termination_height
-        termination_mask = pos[:, 2] > limit
         self.reset_buf = torch.max(goal_mask, length_mask)
-        self.reset_buf = torch.max(self.reset_buf, termination_mask)
+        self.reset_buf = torch.max(self.reset_buf, mask_z)
 
         self.extras["battle_won"][:] = 0
         self.extras["battle_won"][win_mask] = 1
