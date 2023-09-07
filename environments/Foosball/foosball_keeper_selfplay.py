@@ -120,9 +120,8 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
         # Regularization of actions
         self.rew_buf += self._compute_action_regularization()
 
-        dof = [self._robots.get_dof_index("Keeper_W_PrismaticJoint")]
-        fig_pos = self._robots.get_joint_positions(joint_indices=dof, clone=False)
         pull_fig_mask = torch.min(ball_pos[:, 0] > 0, vel < 0.1)
-        fig_pos_dist = torch.abs(fig_pos - ball_pos[:, 1:2])
-        fig_pos_rew = torch.exp(-fig_pos_dist / 0.08)
-        self.rew_buf[pull_fig_mask] = - (1 - fig_pos_rew[pull_fig_mask])
+        if torch.sum(pull_fig_mask) > 0:
+            fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)[0]
+            fig_pos_rew = torch.exp(-fig_pos_dist / 0.08)
+            self.rew_buf[pull_fig_mask] += - (1 - fig_pos_rew[pull_fig_mask])

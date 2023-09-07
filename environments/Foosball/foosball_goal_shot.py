@@ -23,7 +23,7 @@ class FoosballGoalShotTask(FoosballTask):
 
         init_ball_pos = self._init_ball_position[env_ids].clone()
         x_offset = torch.rand_like(init_ball_pos[:, 0], device=device) * 2 - 1
-        init_ball_pos[:, 0] -= 0.497 + 0.005 * x_offset
+        init_ball_pos[:, 0] = 0.497 + 0.005 * x_offset
         y_offset = torch.rand_like(init_ball_pos[:, 1], device=device) * 2 - 1
         y_offset *= self.reset_position_noise
         init_ball_pos[:, 1] = y_offset
@@ -70,9 +70,8 @@ class FoosballGoalShotTask(FoosballTask):
         # Regularization of actions
         self.rew_buf += self._compute_action_regularization()
 
-        dof = [self._robots.get_dof_index("Keeper_W_PrismaticJoint")]
-        fig_pos = self._robots.get_joint_positions(joint_indices=dof, clone=False)
-        pull_fig_mask = torch.min(ball_pos[:, 0] > 0, vel < 0.1)
-        fig_pos_dist = torch.abs(fig_pos - ball_pos[:, 1:2])
-        fig_pos_rew = torch.exp(-fig_pos_dist / 0.08)
-        self.rew_buf[pull_fig_mask] = - (1 - fig_pos_rew[pull_fig_mask])
+        pull_fig_mask = vel < 0.1
+        if torch.sum(pull_fig_mask) > 0:
+            fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)[0]
+            fig_pos_rew = torch.exp(-fig_pos_dist / 0.08)
+            self.rew_buf[pull_fig_mask] += - (1 - fig_pos_rew[pull_fig_mask])
