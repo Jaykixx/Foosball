@@ -1,6 +1,7 @@
 def initialize_task(config, env, init_sim=True):
     from environments.Foosball.foosball_blocking import FoosballBlockingTask
     from environments.Foosball.foosball_goal_shot import FoosballGoalShotTask
+    from environments.Foosball.foosball_goal_shot_obstacles import FoosballGoalShotObstacleTask
     from environments.Foosball.base import FoosballTask
     from environments.Foosball.foosball_selfplay import FoosballSelfPlay
     from environments.Foosball.foosball_keeper_selfplay import FoosballKeeperSelfPlay
@@ -23,6 +24,7 @@ def initialize_task(config, env, init_sim=True):
     task_map = {
         "FoosballBlocking": FoosballBlockingTask,
         "FoosballGoalShot": FoosballGoalShotTask,
+        "FoosballGoalShotObstacle": FoosballGoalShotObstacleTask,
         "Foosball": FoosballTask,
         "FoosballSelfPlay": FoosballSelfPlay,
         "FoosballKeeperSelfPlay": FoosballKeeperSelfPlay,

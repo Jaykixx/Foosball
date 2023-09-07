@@ -55,7 +55,7 @@ class FoosballTask(RLTask):
 
         super(FoosballTask, self).__init__(name, env, offset)
 
-        self.obstacle_dofs = []
+        self.observations_dofs = []
         self.old_actions = torch.zeros((self.num_envs, self._dof), device=self._device)
 
     def set_initial_camera_params(self, camera_position=(0, 0, 10),
@@ -114,7 +114,7 @@ class FoosballTask(RLTask):
 
     def get_observations(self) -> dict:
         # Observe figurines
-        fig_pos = self._robots.get_joint_positions(joint_indices=self.active_dofs, clone=False)
+        fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
         fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_dofs, clone=False)
 
         # Observe game ball in x-, y-axis
@@ -123,8 +123,8 @@ class FoosballTask(RLTask):
         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
 
         # Rescale figure observations
-        offset = self.dof_offset[..., self.active_dofs]
-        range = self.dof_range[..., self.active_dofs]
+        offset = self.dof_offset[..., self.observations_dofs]
+        range = self.dof_range[..., self.observations_dofs]
         fig_pos = 2 * (fig_pos - offset) / range
         fig_vel = fig_vel / self._robot_vel_limit[..., self.active_dofs]
 
@@ -231,6 +231,8 @@ class FoosballTask(RLTask):
         if self.capture and not hasattr(self, 'rgb_annotators'):
             self.get_camera_sensor()
 
+        self.observations_dofs += self.active_dofs
+
         self._robots.switch_control_mode('position')
         # self._robots.switch_control_mode('velocity')
 
@@ -241,7 +243,7 @@ class FoosballTask(RLTask):
         self.dof_offset = (limits[..., 1] - limits[..., 0]) / 2 + limits[..., 0]
 
         rev_joints = {name: self._robots.get_dof_index(name) for name in self.rev_joints}
-        inactive_rev_joints = [joint for joint in rev_joints.values() if joint not in (self.active_dofs + self.obstacle_dofs)]
+        inactive_rev_joints = [joint for joint in rev_joints.values() if joint not in self.observations_dofs]
 
         pris_joints = {name: self._robots.get_dof_index(name) for name in self.pris_joints}
         self.active_pris_joints = {key: value for key, value in pris_joints.items() if value in self.active_dofs}
