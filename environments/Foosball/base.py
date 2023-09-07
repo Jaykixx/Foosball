@@ -243,13 +243,19 @@ class FoosballTask(RLTask):
         self.dof_offset = (limits[..., 1] - limits[..., 0]) / 2 + limits[..., 0]
 
         rev_joints = {name: self._robots.get_dof_index(name) for name in self.rev_joints}
-        inactive_rev_joints = [joint for joint in rev_joints.values() if joint not in self.observations_dofs]
+        inactive_rods = []
+        for joint_name, joint_id in rev_joints.items():
+            if joint_id not in self.observations_dofs:
+                partner_joint = '_'.join([*joint_name.split('_')[:2], "PrismaticJoint"])
+                partner_joint_id = self._robots.get_dof_index(partner_joint)
+                if partner_joint_id not in self.observations_dofs:
+                    inactive_rods.append(joint_id)
 
         pris_joints = {name: self._robots.get_dof_index(name) for name in self.pris_joints}
         self.active_pris_joints = {key: value for key, value in pris_joints.items() if value in self.active_dofs}
 
         self._default_joint_pos = self.dof_offset.clone()
-        self._default_joint_pos[:, inactive_rev_joints] += np.pi/2
+        self._default_joint_pos[:, inactive_rods] += np.pi/2
         self._default_joint_vel = torch.zeros_like(self._default_joint_pos)
 
         self._robot_vel_limit = self.robot.qdlim[None]
