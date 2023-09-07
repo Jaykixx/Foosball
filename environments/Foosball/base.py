@@ -55,6 +55,7 @@ class FoosballTask(RLTask):
 
         super(FoosballTask, self).__init__(name, env, offset)
 
+        self.obstacle_dofs = []
         self.old_actions = torch.zeros((self.num_envs, self._dof), device=self._device)
 
     def set_initial_camera_params(self, camera_position=(0, 0, 10),
