@@ -110,6 +110,9 @@ class FoosballSelfPlay(FoosballTask):
         r.params["opponent"] = True
 
         self.agents = [r.create_player() for _ in range(self.num_opponents)]
+        if config['params']['load_checkpoint']:
+            for agent in self.agents:
+                agent.restore(config['params']['load_path'])
 
     def prepare_opponent(self):
         self._full_actions = self.add_opponent_action
