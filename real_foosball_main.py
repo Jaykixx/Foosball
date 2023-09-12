@@ -1,3 +1,4 @@
+import torch
 from omniisaacgymenvs.utils.hydra_cfg.hydra_utils import *
 from omniisaacgymenvs.utils.hydra_cfg.reformat import omegaconf_to_dict, print_dict
 from omniisaacgymenvs.utils.config_utils.path_utils import retrieve_checkpoint_path
@@ -5,15 +6,45 @@ from rl_games.algos_torch import torch_ext
 
 import hydra
 from omegaconf import DictConfig
-from gym import spaces
 import numpy as np
 
-from utilities.custom_runner import CustomRunner as Runner
 from utilities.models import model_builder
 import os
 import datetime
 from os import path
 import sys
+import time
+
+
+keeper_W_Rev_Drive = {
+    "name": "Keeper_W_Rev_Drive",
+    "eds_location": "C5-E-2-09.eds",
+    "node_id": 2,
+    "command_limits": [-3585, 3585],
+    "range_of_motion": [-2*np.pi, 2*np.pi]
+}
+
+keeper_W_Pris_Drive = {
+    "name": "Keeper_W_Pris_Drive",
+    "eds_location": "C5-E-2-09.eds",
+    "node_id": 1,
+    "command_limits": [-4734, 7213],
+    "range_of_motion": [-0.12, 0.12]
+}
+
+
+settings = {
+    "device": 'cuda:0',
+    "motor_info": [keeper_W_Pris_Drive],
+    "controlled_rods": ['Keeper_W'],
+    "player_rods": [],
+    "passive_rods": [],
+    "observe_joints": True,  # if True, joint positions are used as observations
+    "observation_order": ['Keeper_W_Pris_Drive', 'Ball'],
+    "detection_model": 'Yolo_Parameters_v0s.pt',
+    "detection_classes": [1],  # 0 for figures, 1 for ball
+    "prediction_steps": 0
+}
 
 
 class SystemInterface:
@@ -27,7 +58,6 @@ class SystemInterface:
         # First create system interface to get env info
         sys.path.append(path.abspath('../FoosballConnection'))
         from system_interface import FoosballInterface
-        # TODO: We probably need to install motor402 to run
         answer = None
         while not ((answer == 'y') or (answer == 'n')):
             answer = input(
@@ -37,14 +67,14 @@ class SystemInterface:
         if answer == 'n':
             return
 
-        # TODO: Send player model to Interface? Or go different route?
-        self.env_interface = FoosballInterface()
+        settings["device"] = self.cfg["rl_device"]
+        self.env_interface = FoosballInterface(settings)
 
     def _prepare_model_config(self):
         cfg_params = self.rlg_config_dict['config']
         config = {
             'actions_num': self.env_interface.num_motors,
-            'input_shape': (self.env_interface.num_obs,),
+            'input_shape': (self.env_interface.num_obs-1,),
             'value_size': 1,
             'normalize_value': cfg_params.get('normalize_value', False),
             'normalize_input': cfg_params.get('normalize_input', False)
@@ -55,24 +85,48 @@ class SystemInterface:
         builder = model_builder.CustomModelBuilder()
         model = builder.load(self.rlg_config_dict)
         config = self._prepare_model_config()
-        self.model = model.build(config).a2c_network
+        self.model = model.build(config)
+        self.model.to(self.cfg["rl_device"])
+        self.model.eval()
 
         # Load trained model parameters
         checkpoint = self.cfg.checkpoint
         if checkpoint is not None and checkpoint != '':
             checkpoint = torch_ext.load_checkpoint(checkpoint)
             self.model.load_state_dict(checkpoint['model'])
+            if config['normalize_input'] and 'running_mean_std' in checkpoint:
+                self.model.running_mean_std.load_state_dict(checkpoint['running_mean_std'])
+            return True
         else:
             print("No valid checkpoint has been given. Aborting execution for safety!")
-            return
+            return False
+
+    def compute_actions(self, state):
+        # State is in (n, 1) so transpose
+        pris = -state[0:1]
+        ball = state[2:]
+        state = torch.concatenate(
+            (pris, ball)
+        )
+        input_dict = {
+            'obs': state.T.to(torch.float32),
+            'is_train': False
+        }
+        with torch.no_grad():
+            actions = -self.model(input_dict)['mus'][0]
+        return actions
 
     def run(self):
         # create runner and set the settings
         self.rlg_config_dict = omegaconf_to_dict(self.cfg.train)['params']
         self._get_env_interface()
-        self._get_network_model()
-        print("Done.")
-        # self.env_interface.run()
+        result = self._get_network_model()
+
+        # Shutdowm if checkpoint is invalid for safety
+        if not result:
+            return
+
+        self.env_interface.run(self.compute_actions)
 
 
 @hydra.main(config_name="real_system_config", config_path="cfg")
@@ -85,9 +139,12 @@ def parse_hydra_configs(cfg: DictConfig):
 
     # ensure checkpoints can be specified as relative paths
     if cfg.checkpoint:
-        cfg.checkpoint = retrieve_checkpoint_path(cfg.checkpoint)
-        if cfg.checkpoint is None:
-            quit()
+        base_path = path.dirname(path.abspath(__file__))
+        file_path = path.join(base_path, cfg.checkpoint)
+        if path.exists(file_path):
+            cfg.checkpoint = file_path
+        else:
+            cfg.checkpoint = ''
 
     cfg_dict = omegaconf_to_dict(cfg)
     print_dict(cfg_dict)

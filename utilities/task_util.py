@@ -5,6 +5,7 @@ def initialize_task(config, env, init_sim=True):
     from environments.Foosball.base import FoosballTask
     from environments.Foosball.foosball_selfplay import FoosballSelfPlay
     from environments.Foosball.foosball_keeper_selfplay import FoosballKeeperSelfPlay
+    from environments.Foosball.foosball_tracking import FoosballTrackingTask
     # Default Environments
     from omniisaacgymenvs.tasks.allegro_hand import AllegroHandTask
     from omniisaacgymenvs.tasks.ant import AntLocomotionTask
@@ -22,6 +23,7 @@ def initialize_task(config, env, init_sim=True):
 
     # Mappings from strings to environments
     task_map = {
+        "FoosballTracking": FoosballTrackingTask,
         "FoosballBlocking": FoosballBlockingTask,
         "FoosballGoalShot": FoosballGoalShotTask,
         "FoosballGoalShotObstacle": FoosballGoalShotObstacleTask,

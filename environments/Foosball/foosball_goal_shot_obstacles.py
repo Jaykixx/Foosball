@@ -6,7 +6,7 @@ class FoosballGoalShotObstacleTask(FoosballGoalShotTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
         if not hasattr(self, "_num_observations"):
-            self._num_observations = 11
+            self._num_observations = 12
         if not hasattr(self, "_num_actions"):
             self._num_actions = 2
         if not hasattr(self, "_dof"):
@@ -18,7 +18,8 @@ class FoosballGoalShotObstacleTask(FoosballGoalShotTask):
         self.passive_defense_dofs = [
             self._robots.get_dof_index("Keeper_B_PrismaticJoint"),
             self._robots.get_dof_index("Defense_B_PrismaticJoint"),
-            self._robots.get_dof_index("Mid_B_PrismaticJoint")
+            self._robots.get_dof_index("Offense_W_PrismaticJoint"),
+            self._robots.get_dof_index("Offense_B_PrismaticJoint"),
         ]
 
         self.observations_dofs = self.passive_defense_dofs.copy()

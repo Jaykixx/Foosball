@@ -122,11 +122,11 @@ class FoosballTask(RLTask):
         ball_pos = ball_pos[:, :2] - self._env_pos[:, :2]
         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
 
-        # Rescale figure observations
-        offset = self.dof_offset[..., self.observations_dofs]
-        range = self.dof_range[..., self.observations_dofs]
-        fig_pos = 2 * (fig_pos - offset) / range
-        fig_vel = fig_vel / self._robot_vel_limit[..., self.active_dofs]
+        # # Rescale figure observations
+        # offset = self.dof_offset[..., self.observations_dofs]
+        # range = self.dof_range[..., self.observations_dofs]
+        # fig_pos = 2 * (fig_pos - offset) / range
+        # fig_vel = fig_vel / self._robot_vel_limit[..., self.active_dofs]
 
         self.obs_buf = torch.cat(
             (fig_pos, fig_vel, ball_pos, ball_vel), dim=-1

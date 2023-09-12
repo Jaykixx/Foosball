@@ -127,3 +127,20 @@ class FoosballSelfPlay(FoosballTask):
     def update_weights(self, indices, weights):
         for i in indices:
             self.agents[i%self.num_opponents].set_weights(weights)
+
+    def _calculate_metrics(self, ball_pos) -> None:
+        super()._calculate_metrics(ball_pos)
+
+        # Reward closeness to opponent goal
+        dist_to_b_goal, _ = self._compute_ball_to_goal_distances(ball_pos)
+        dist_to_goal_rew = torch.exp(-6*dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
+        self.rew_buf += dist_to_goal_rew
+
+        # Regularization of actions
+        self.rew_buf += self._compute_action_regularization()
+
+        # Pull figures to ball
+        fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)
+        fig_pos_dist = torch.stack(fig_pos_dist)
+        fig_pos_rew = torch.exp(-6*fig_pos_dist).sum()
+        self.rew_buf += - (1 - fig_pos_rew)
