@@ -5,3 +5,6 @@ __pycache__/
 runs/
 .thumbs/
 /environments/Foosball/Models/.thumbs/
+
+cfg/
+/cfg/

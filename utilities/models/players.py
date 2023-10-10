@@ -5,7 +5,7 @@ An extension to rl_games\algos_torch\players.py for new policies.
 from rl_games.algos_torch.players import PpoPlayerContinuous, rescale_actions
 from rl_games.common.tr_helpers import unsqueeze_obs
 
-from utils.models import model_builder
+from utilities.models import model_builder
 
 import torch
 import time
@@ -19,6 +19,8 @@ class A2CPlayer(PpoPlayerContinuous):
         PpoPlayerContinuous.__init__(self, params)
         if hasattr(self.model, "init_tensors"):
             self.model.init_tensors(self.device)
+        if params.get("opponent", False):
+            self.model.eval()
 
     @property
     def _env_progress_buffer(self):
@@ -37,6 +39,7 @@ class A2CPlayer(PpoPlayerContinuous):
             'rnn_states': self.states
         }
         if self.is_ndp:
+            # TODO: Adjust for real system tests
             proc_dmp_init_obs = self._preproc_obs(obs['dmp_init_obs'])
             input_dict['dmp_init_obs'] = proc_dmp_init_obs
             input_dict['progress_buf'] = self._env_progress_buffer

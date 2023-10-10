@@ -3,7 +3,7 @@ from rl_games.common import object_factory
 from rl_games.algos_torch import models
 import rl_games.algos_torch
 
-from utils.models.ndp import NDP, NDPA2CBuilder
+from utilities.models.ndp import NDP, NDPA2CBuilder
 
 
 NETWORK_REGISTRY = {}

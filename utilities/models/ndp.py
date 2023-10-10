@@ -11,7 +11,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 
-from utils.models import DMP
+from utilities.models import DMP
 
 
 class NDP(BaseModel):

@@ -31,7 +31,7 @@ class Foosball(Robot):
         if self._usd_path is None:
             root_dir = os.path.dirname(os.path.abspath(__file__))
             self._usd_path = os.path.join(
-                root_dir, "../../environments/Foosball/Models/Foosball_v2_Fully_Assembled.usd"
+                root_dir, "../../environments/Foosball/Models/Foosball_Instanceable.usd"
             )
 
         self.reference = add_reference_to_stage(self._usd_path, prim_path)
@@ -45,6 +45,13 @@ class Foosball(Robot):
         )
 
         self.qdlim = torch.tensor([4.0] * 8 + [100*np.pi] * 8, device=device)
+
+        self.figure_positions = {
+            'Keeper': torch.tensor([0], device=device),
+            'Defense': torch.tensor([-0.1235, 0.1235], device=device),
+            'Mid': torch.tensor([-0.241, -0.1205, 0, 0.1205, 0.241], device=device),
+            'Offense': torch.tensor([-0.184, 0, 0.184], device=device)
+        }
 
         self.dof_paths = [
             "Keeper_W_PrismaticJoint",

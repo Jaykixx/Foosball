@@ -2,7 +2,7 @@ from rl_games.common.a2c_common import *
 from rl_games.common.experience import ExperienceBuffer
 from rl_games.algos_torch import torch_ext
 
-from utils.models import model_builder
+from utilities.models import model_builder
 
 import numpy as np
 import torch
@@ -17,6 +17,8 @@ class CustomA2CBase(A2CBase):
         self.model_name = params['model']['name']
         self.is_ndp = True if self.model_name == 'ndp' else False
         super(CustomA2CBase, self).__init__(base_name, params)
+        self.game_scores = torch_ext.AverageMeter(1, self.games_to_track).to(
+            self.ppo_device)
 
     @property
     def _env_progress_buffer(self):
@@ -190,6 +192,8 @@ class CustomA2CBase(A2CBase):
             env_done_indices = self.dones.view(self.num_actors, self.num_agents).all(dim=1).nonzero(as_tuple=False)
 
             self.game_rewards.update(self.current_rewards[env_done_indices])
+            if self.has_self_play_config:
+                self.game_scores.update(infos["battle_won"][env_done_indices])
             self.game_lengths.update(self.current_lengths[env_done_indices])
             self.algo_observer.process_infos(infos, env_done_indices)
 

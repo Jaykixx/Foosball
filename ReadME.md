@@ -15,7 +15,7 @@ PYTHON_PATH -m tensorboard.main --logdir runs/Foosball/summaries
 
 ### Leistungsrechner
 ``
-doskey PYTHON_PATH=C:\Users\"Janosch Moos"\AppData\Local\ov\pkg\isaac_sim-2022.1.1\python.bat $*
+doskey PYTHON_PATH=C:\Users\"Janosch Moos"\AppData\Local\ov\pkg\isaac_sim-2022.2.1\python.bat $*
 ``
 
 ``
