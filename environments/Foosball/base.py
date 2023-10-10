@@ -1,14 +1,15 @@
 from omni.isaac.core.articulations import ArticulationView
 from omni.isaac.core.objects import DynamicSphere, DynamicCuboid
-from omni.isaac.core.utils.stage import get_current_stage
+from omni.isaac.core.utils.stage import get_current_stage, add_reference_to_stage
 from omni.isaac.core.utils.prims import get_prim_at_path, is_prim_path_valid
 from omni.isaac.core.utils.string import find_unique_string_name
 from omni.kit.viewport.utility import get_viewport_from_window_name
 from omniisaacgymenvs.tasks.base.rl_task import RLTask
 from omni.isaac.core.materials import PhysicsMaterial
-from omni.isaac.core.prims import RigidPrimView
+from omni.isaac.core.prims import RigidPrimView, XFormPrimView
 from omni.isaac.core.utils.torch.maths import *
 from utilities.robots.foosball import Foosball
+from utilities.models.kalman_filter import KalmanFilter
 import omni.replicator.core as rep
 from pxr import PhysxSchema, UsdPhysics, Usd, UsdGeom
 from PIL import Image
@@ -25,11 +26,6 @@ class FoosballTask(RLTask):
         self._sim_config = sim_config
         self._cfg = sim_config.config
         self._task_cfg = sim_config.task_config
-
-        # Check if video capture is required
-        self.headless = self._cfg["headless"]
-        self.capture = self._cfg["capture"] if not self.headless else False
-        self.frame_id = 0
 
         # Environment grid parameters
         self._num_envs = self._task_cfg["env"]["numEnvs"]
@@ -55,17 +51,46 @@ class FoosballTask(RLTask):
 
         super(FoosballTask, self).__init__(name, env, offset)
 
+        # Check if video capture is required
+        self.headless = self._cfg["headless"]
+        self.capture = self._cfg["capture"] if not self.headless else False
+        self.frame_id = torch.zeros(self.num_envs, device=self.device, dtype=torch.int32)
+        self.game_counter = torch.ones(self.num_envs, device=self.device, dtype=torch.int32) * -2
+
+        if not hasattr(self, "kalman"):
+            self.apply_kalman_filter = self._task_cfg["env"].get("applyKalmanFiltering", False)
+            if self.apply_kalman_filter:
+                n_obs = self._dof - self.num_actions + 2
+                self.kalman = KalmanFilter(2 * n_obs, n_obs, self.num_envs, self._device)
+
         self.observations_dofs = []
         self.old_actions = torch.zeros((self.num_envs, self._dof), device=self._device)
 
     def set_initial_camera_params(self, camera_position=(0, 0, 10),
                                   camera_target=(0, 0, 0)):
         if not self.headless:
+            cam_prim_path = f"/World/envs/env_0/Foosball/Top_Down_Camera"
             viewport_api_2 = get_viewport_from_window_name("Viewport")
-            viewport_api_2.set_active_camera("/World/envs/env_0/Foosball/Top_Down_Camera")
+            viewport_api_2.set_active_camera(cam_prim_path)
         else:
             super().set_initial_camera_params(camera_position=camera_position,
                                               camera_target=camera_target)
+
+    def create_motion_capture_camera(self):
+        cam_prim_path = f"/World/envs/env_0/Foosball/Top_Down_Camera"
+        camera_prim = get_prim_at_path(cam_prim_path)
+        physxRbAPI = PhysxSchema.PhysxRigidBodyAPI.Apply(camera_prim)
+        physxRbAPI.CreateDisableGravityAttr().Set(True)
+        self.camera = RigidPrimView(cam_prim_path)
+
+        cam_pos = self.camera.get_world_poses(clone=False)[0]
+        cam_pos = cam_pos - self._env_pos[0:1] + self._env_pos[256:257]
+        self.camera.set_world_poses(cam_pos)
+
+        lin_vel = torch.tensor([[0, -0.1, 0.1]])
+        ang_vel = torch.tensor([[18, 0, 0]])
+        cam_vel = torch.concatenate((lin_vel, ang_vel), dim=-1)
+        self.camera.set_velocities(cam_vel)
 
     def set_up_scene(self, scene) -> None:
         self.get_game_table()
@@ -84,6 +109,11 @@ class FoosballTask(RLTask):
             prim_paths_expr="/World/envs/env_.*/Foosball/Ball", name="ball_view", reset_xform_properties=False
         )
         scene.add(self._balls)
+
+        physxSceneAPI = PhysxSchema.PhysxSceneAPI.Apply(get_prim_at_path('/physicsScene'))
+        physxSceneAPI.CreateEnableCCDAttr().Set(True)
+
+        # self.create_motion_capture_camera()
 
     def get_game_table(self) -> None:
         self.robot = Foosball(self.default_zero_env_path, device=self.device)
@@ -118,9 +148,17 @@ class FoosballTask(RLTask):
         fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_dofs, clone=False)
 
         # Observe game ball in x-, y-axis
-        ball_pos = self._balls.get_world_poses(clone=False)[0]
-        ball_pos = ball_pos[:, :2] - self._env_pos[:, :2]
-        ball_vel = self._balls.get_velocities(clone=False)[:, :2]
+        ball_obs = self._balls.get_world_poses(clone=False)[0]
+        ball_obs = ball_obs[:, :2] - self._env_pos[:, :2]
+
+        if self.apply_kalman_filter:
+            self.kalman.predict()
+            kstate = self.kalman.state.clone()
+            ball_pos, ball_vel = kstate[:, :2, 0], kstate[:, 2:, 0] * 60
+            self.kalman.correct(ball_obs.unsqueeze(-1))
+        else:
+            ball_vel = self._balls.get_velocities(clone=False)[:, :2]
+            ball_pos = ball_obs
 
         # # Rescale figure observations
         # offset = self.dof_offset[..., self.observations_dofs]
@@ -161,6 +199,8 @@ class FoosballTask(RLTask):
 
         self.reset_ball(env_ids)
 
+        self.game_counter[env_ids] += 1
+        self.frame_id[env_ids] = 0
         self.reset_buf[env_ids] = 0
         self.progress_buf[env_ids] = 0
 
@@ -183,30 +223,6 @@ class FoosballTask(RLTask):
         init_ball_vel[..., 2:] = 0
         self._balls.set_velocities(init_ball_vel, indices=indices)
 
-        # Signs determines which goal is targeted
-        # print("Reseting Environments.")
-        # signs = torch.sign(torch.rand(num_resets, device=self.device) - 0.5)
-        # # signs = 1
-        # init_ball_pos = self._init_ball_position[env_ids].clone()
-        # init_ball_rot = self._init_ball_rotation[env_ids].clone()
-        # y_offset = torch_rand_float(-0.3, 0.3, (num_resets, 1), self._device).squeeze()
-        # init_ball_pos[..., 1] += signs * y_offset
-        # self._balls.set_world_poses(init_ball_pos + self._env_pos[env_ids], init_ball_rot, indices=indices)
-        #
-        # init_ball_vel = self._init_ball_velocities[env_ids]
-        # d1 = y_offset.abs() - 0.205 / 2 + 2 * self._ball_radius
-        # d2 = y_offset.abs() + 0.205 / 2 - 2 * self._ball_radius
-        # xd1 = torch.sqrt(25 / (1 + (d1 / 1.08) ** 2))
-        # xd2 = torch.sqrt(25 / (1 + (d2 / 1.08) ** 2))
-        # xd_min = torch.minimum(xd1, xd2)
-        # xd_max = torch.maximum(xd1, xd2)
-        # xd = torch.rand_like(xd_min, device=self._device) * (xd_max - xd_min) + xd_min
-        # yd = - torch.sign(y_offset) * torch.sqrt(25 - xd ** 2)
-        # init_ball_vel[..., 0] = signs * xd
-        # init_ball_vel[..., 1] = signs * yd
-        # init_ball_vel[..., 2:] = 0
-        # self._balls.set_velocities(init_ball_vel, indices=indices)
-
     def pre_physics_step(self, actions) -> None:
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
 
@@ -224,6 +240,23 @@ class FoosballTask(RLTask):
 
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
+
+    def hide_inactive_rods(self):
+        flags = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        for rod_name in self.inactive_rods:
+            if rod_name[-1] == 'W':
+                rod_prim = XFormPrimView(
+                    prim_paths_expr="/World/envs/env_.*/Foosball/White/" + rod_name,
+                    name="rod_view",
+                    reset_xform_properties=False
+                )
+            else:
+                rod_prim = XFormPrimView(
+                    prim_paths_expr="/World/envs/env_.*/Foosball/Black/" + rod_name,
+                    name="rod_view",
+                    reset_xform_properties=False
+                )
+            rod_prim.set_visibilities(flags)
 
     def post_reset(self) -> None:
         if not hasattr(self, 'active_dofs'):
@@ -243,19 +276,22 @@ class FoosballTask(RLTask):
         self.dof_offset = (limits[..., 1] - limits[..., 0]) / 2 + limits[..., 0]
 
         rev_joints = {name: self._robots.get_dof_index(name) for name in self.rev_joints}
-        inactive_rods = []
+        self.inactive_rods = {}
         for joint_name, joint_id in rev_joints.items():
             if joint_id not in self.observations_dofs:
-                partner_joint = '_'.join([*joint_name.split('_')[:2], "PrismaticJoint"])
+                rod_name = '_'.join(joint_name.split('_')[:2])
+                partner_joint = rod_name + "_PrismaticJoint"
                 partner_joint_id = self._robots.get_dof_index(partner_joint)
                 if partner_joint_id not in self.observations_dofs:
-                    inactive_rods.append(joint_id)
+                    self.inactive_rods[rod_name] = joint_id
+
+        self.hide_inactive_rods()
 
         pris_joints = {name: self._robots.get_dof_index(name) for name in self.pris_joints}
         self.active_pris_joints = {key: value for key, value in pris_joints.items() if value in self.active_dofs}
 
         self._default_joint_pos = self.dof_offset.clone()
-        self._default_joint_pos[:, inactive_rods] += np.pi/2
+        self._default_joint_pos[:, list(self.inactive_rods.values())] += np.pi/2
         self._default_joint_vel = torch.zeros_like(self._default_joint_pos)
 
         self._robot_vel_limit = self.robot.qdlim[None]
@@ -273,9 +309,9 @@ class FoosballTask(RLTask):
     def _compute_action_regularization(self):
         # Regularization of actions
         action_diff = self.actions - self.old_actions
-        action_penalty_w = torch.sum(action_diff[..., :self._num_actions] ** 2, dim=-1)
-        # action_penalty_b = torch.sum(action_diff[..., self._num_actions:] ** 2, dim=-1)
-        return 1e-2 * action_penalty_w  # - action_penalty_b)
+        action_penalty_w = torch.mean(action_diff[..., :self._num_actions] ** 2, dim=-1)
+        # action_penalty_b = torch.mean(action_diff[..., self._num_actions:] ** 2, dim=-1)
+        return - action_penalty_w  # - action_penalty_b)
 
     def _compute_ball_to_goal_distances(self, ball_pos):
         # Compute distance ball to goal reward
@@ -332,12 +368,12 @@ class FoosballTask(RLTask):
         self.extras["battle_won"][loss_mask] = -1
         if self.reset_buf.sum() > 0:
             self.extras["Games_finished_with_goals"] = goal_mask.sum() / self.reset_buf.sum()
-            self.extras["Wins"] = win_mask.sum() / self.reset_buf.sum()
-            self.extras["Losses"] = loss_mask.sum() / self.reset_buf.sum()
+            self.extras["Win_Rate"] = win_mask.sum() / self.reset_buf.sum()
+            self.extras["Loss_Rate"] = loss_mask.sum() / self.reset_buf.sum()
         else:
             self.extras["Games_finished_with_goals"] = 0
-            self.extras["Wins"] = 0
-            self.extras["Losses"] = 0
+            self.extras["Win_Rate"] = 0
+            self.extras["Loss_Rate"] = 0
 
         debug_cond_x = torch.max(ball_pos[:, 0] < -0.71, ball_pos[:, 0] > 0.71)
         debug_cond_y = torch.max(ball_pos[:, 1] < -0.367, ball_pos[:, 1] > 0.367)
@@ -360,11 +396,12 @@ class FoosballTask(RLTask):
         pass
 
     def get_camera_sensor(self) -> None:
-        self.frame_path = os.path.join(os.getcwd(), f"runs/{self.name}/capture")
-        os.makedirs(self.frame_path, exist_ok=True)
-
         self.rgb_annotators = []
+        self.frame_paths = []
         for i in range(self.num_envs):
+            frame_path = os.path.join(os.getcwd(), f"runs/{self.name}/capture/Env_{i}")
+            os.makedirs(frame_path, exist_ok=True)
+            self.frame_paths.append(frame_path)
             camera_path = self.default_zero_env_path[:-1] + f"{i}/Foosball/Top_Down_Camera"
             rp = rep.create.render_product(camera_path, resolution=(1280, 720))
             rgb = rep.AnnotatorRegistry.get_annotator("rgb")
@@ -375,9 +412,12 @@ class FoosballTask(RLTask):
         for i, rgb_annotator in enumerate(self.rgb_annotators):
             data = rgb_annotator.get_data()
             if len(data) > 0:  # Catch cases after reset
-                path = self.frame_path + f"/rp_{i}_frame_" + str(self.frame_id).zfill(3)
+                frame_path = os.path.join(self.frame_paths[i], f"Game_{self.game_counter[i].item():02}")
+                if not os.path.isdir(frame_path):
+                    os.makedirs(frame_path, exist_ok=True)
+                path = frame_path + f"/frame_{self.frame_id[i].item():04}"
                 save_rgb(data, path)
-        self.frame_id += 1
+            self.frame_id[i] += 1
 
 
 def save_rgb(rgb_data, file_name):

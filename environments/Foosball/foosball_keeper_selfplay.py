@@ -1,11 +1,7 @@
-import os
-import copy
 import torch
 
 from environments.Foosball.foosball_selfplay import FoosballSelfPlay
-
-from utilities.custom_runner import CustomRunner as Runner
-import time
+from utilities.models.kalman_filter import KalmanFilter
 
 
 class FoosballKeeperSelfPlay(FoosballSelfPlay):
@@ -45,33 +41,35 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
 
         # # Choose random batch to start with a moving ball
         # if env_ids.size(0) > 1:
-        #     perm = torch.randperm(env_ids.size(0))
-        #     idx = perm[:int(len(env_ids)/2)]
+        #     pass
+        #     # perm = torch.randperm(env_ids.size(0))
+        #     # idx = perm[:int(len(env_ids)/2)]
         # else:
         #     if torch.rand((1,), device=device).item() - 0.5 > 0:
-        #         idx = []  # [0]
+        #         idx = [0]
         #     else:
-        #         idx = []
-        idx = []
+        #         idx = [0]
+        # # idx = []
 
         init_ball_vel = self._init_ball_velocities[env_ids].clone()
 
-        # Reset ball velocity to vector of random magnitude aimed at goal
-        if len(idx) > 0:
-            total_vel = torch.rand(len(idx), device=device) \
-                        * self.reset_velocity_noise \
-                        + (10 - self.reset_velocity_noise)  # max 10 m/s
-            d1 = y_offset[idx].abs() - 0.205 / 2 + 2 * self._ball_radius
-            d2 = y_offset[idx].abs() + 0.205 / 2 - 2 * self._ball_radius
-            xd1 = torch.sqrt(total_vel**2 / (1 + (d1 / 1.08) ** 2))
-            xd2 = torch.sqrt(total_vel**2 / (1 + (d2 / 1.08) ** 2))
-            xd_min = torch.minimum(xd1, xd2)
-            xd_max = torch.maximum(xd1, xd2)
-            xd = torch.rand_like(xd_min, device=device) * (xd_max - xd_min) + xd_min
-            yd = - torch.sign(y_offset[idx]) * torch.sqrt(total_vel**2 - xd ** 2)
-            init_ball_vel[idx, 0] = sign[idx] * xd
-            init_ball_vel[idx, 1] = sign[idx] * yd
-        init_ball_vel[..., 2:] = 0
+        # # Reset ball velocity to vector of random magnitude aimed at goal
+        # if len(idx) > 0:
+        #     total_vel = torch.rand(len(idx), device=device) \
+        #                 * self.reset_velocity_noise \
+        #                 + (10 - self.reset_velocity_noise)  # max 10 m/s
+        #     d1 = y_offset[idx].abs() - 0.205 / 2 + 2 * self._ball_radius
+        #     d2 = y_offset[idx].abs() + 0.205 / 2 - 2 * self._ball_radius
+        #     x_offset = sign[idx] * 0.6 - init_ball_pos[idx, 0]
+        #     xd1 = torch.sqrt(total_vel**2 / (1 + (d1 / x_offset) ** 2))
+        #     xd2 = torch.sqrt(total_vel**2 / (1 + (d2 / x_offset) ** 2))
+        #     xd_min = torch.minimum(xd1, xd2)
+        #     xd_max = torch.maximum(xd1, xd2)
+        #     xd = torch.rand_like(xd_min, device=device) * (xd_max - xd_min) + xd_min
+        #     yd = - torch.sign(y_offset[idx]) * torch.sqrt(total_vel**2 - xd ** 2)
+        #     init_ball_vel[idx, 0] = sign[idx] * xd
+        #     init_ball_vel[idx, 1] = sign[idx] * yd
+
         self._balls.set_velocities(init_ball_vel, indices=indices)
 
     def get_observations(self) -> dict:
@@ -84,8 +82,8 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
         fig_vel_b = fig_vel[:, self.num_actions:]
 
         # Observe game ball in x-, y-axis
-        ball_w_pos = self._balls.get_world_poses(clone=False)[0]
-        ball_pos = ball_w_pos[:, :2] - self._env_pos[:, :2]
+        ball_pos = self._balls.get_world_poses(clone=False)[0]
+        ball_pos = ball_pos[:, :2] - self._env_pos[:, :2]
         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
 
         self.obs_buf = torch.cat(
@@ -112,10 +110,10 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
         vel = self._balls.get_velocities(clone=False)[:, :2]
         vel = torch.norm(vel, 2, dim=-1)
 
-        # Award closeness to opponent goal
-        dist_to_b_goal, _ = self._compute_ball_to_goal_distances(ball_pos)
-        dist_to_goal_rew = torch.exp(-6*dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
-        self.rew_buf += dist_to_goal_rew
+        # # Award closeness to opponent goal
+        # dist_to_b_goal, _ = self._compute_ball_to_goal_distances(ball_pos)
+        # dist_to_goal_rew = torch.exp(-6*dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
+        # self.rew_buf += dist_to_goal_rew
 
         # Regularization of actions
         self.rew_buf += self._compute_action_regularization()

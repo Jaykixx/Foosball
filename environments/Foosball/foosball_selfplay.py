@@ -131,16 +131,21 @@ class FoosballSelfPlay(FoosballTask):
     def _calculate_metrics(self, ball_pos) -> None:
         super()._calculate_metrics(ball_pos)
 
-        # Reward closeness to opponent goal
-        dist_to_b_goal, _ = self._compute_ball_to_goal_distances(ball_pos)
-        dist_to_goal_rew = torch.exp(-6*dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
-        self.rew_buf += dist_to_goal_rew
-
-        # Regularization of actions
-        self.rew_buf += self._compute_action_regularization()
-
-        # Pull figures to ball
-        fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)
-        fig_pos_dist = torch.stack(fig_pos_dist)
-        fig_pos_rew = torch.exp(-6*fig_pos_dist).sum()
-        self.rew_buf += - (1 - fig_pos_rew)
+        # # Reward closeness to opponent goal
+        # dist_to_b_goal, _ = self._compute_ball_to_goal_distances(ball_pos)
+        # dist_to_goal_rew = torch.exp(-6*dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
+        # self.rew_buf += dist_to_goal_rew
+        #
+        # # Regularization of actions
+        # self.rew_buf += self._compute_action_regularization()
+        #
+        # # Pull figures to ball
+        # fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)
+        # fig_pos_dist = torch.stack(fig_pos_dist)
+        # fig_pos_rew = torch.exp(-6*fig_pos_dist).mean(dim=0)
+        # self.rew_buf += - (1 - fig_pos_rew)
+        #
+        # dofs = ["Keeper_W_RevoluteJoint", "Defense_W_RevoluteJoint", "Mid_W_RevoluteJoint", "Offense_W_RevoluteJoint"]
+        # dof_ids = [self._robots.get_dof_index(dof) for dof in dofs]
+        # fig_rot = self._robots.get_joint_positions(joint_indices=dof_ids, clone=False)
+        # self.rew_buf += 0.1 * torch.mean(torch.cos(fig_rot) - 1, dim=-1)
