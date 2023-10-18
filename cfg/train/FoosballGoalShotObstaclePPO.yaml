@@ -5,7 +5,7 @@ params:
     name: a2c_continuous
 
   model:
-    name: continuous_a2c_logstd  # continuous_a2c_logstd
+    name: ndp  # continuous_a2c_logstd
 
   network:
     name: actor_critic
@@ -31,7 +31,7 @@ params:
       regularizer:
         name: None
     dmp: # Only for ndp models
-      numRBFs: 20
+      numRBFs: 25
       steps: 10
       kernel: "gaussian"
       target_crossing: True
@@ -67,11 +67,11 @@ params:
     schedule_type: legacy
     kl_threshold: 0.008
     score_to_win: 10000000
-    max_epochs: ${resolve_default:400,${....max_iterations}}
+    max_epochs: ${resolve_default:1500,${....max_iterations}}
     save_best_after: 100
     save_frequency: 200
     grad_norm: 1.0
-    entropy_coef: 0.0
+    entropy_coef: 0.003
     truncate_grads: True
     e_clip: 0.2
     horizon_length: 64
