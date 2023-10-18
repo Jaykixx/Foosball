@@ -86,8 +86,8 @@ class DMP:
             self.dg = parameters[..., -n:-n+dof]
         if self.opt_hyperparams:
             f = torch.nn.Softplus()
-            # self.alpha_z = f(parameters[..., -dof:]) * self.hyperparams_scale
-            self.alpha_z = f(parameters[..., -dof:]) * self.hyperparams_scale
+            # f = torch.nn.ReLU()
+            self.alpha_z = f(parameters[..., -dof:]) * self.hyperparams_scale + 1
             self.beta = self.alpha_z / 4
             self.alpha_x = self.alpha_z / 3
             self.c = torch.einsum('bd, n -> bdn', -self.alpha_x, self.temp_spacing).exp()

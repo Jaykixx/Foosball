@@ -6,7 +6,7 @@ class FoosballGoalShotTask(FoosballTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
         if not hasattr(self, "_num_observations"):
-            self._num_observations = 6
+            self._num_observations = 8
         if not hasattr(self, "_num_actions"):
             self._num_actions = 2
         if not hasattr(self, "_dof"):
@@ -35,34 +35,34 @@ class FoosballGoalShotTask(FoosballTask):
 
         self._balls.set_velocities(self._init_ball_velocities[env_ids].clone(), indices=indices)
 
-    def get_observations(self) -> dict:
-        # Observe figurines
-        fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
-
-        # Observe game ball in x-, y-axis
-        ball_pos = self._balls.get_world_poses(clone=False)[0]
-        ball_pos = ball_pos[:, :2] - self._env_pos[:, :2]
-
-        if self.apply_kalman_filter:
-            self.kalman.predict()
-            ball_pos, ball_vel = self.kalman.state[:2], self.kalman.state[2:]
-            self.kalman.correct(ball_pos)
-        else:
-            ball_vel = self._balls.get_velocities(clone=False)[:, :2]
-
-        self.obs_buf = torch.cat(
-            (fig_pos, ball_pos, ball_vel), dim=-1
-        )
-
-        observations = {
-            self._robots.name: {
-                "obs_buf": self.obs_buf
-            }
-        }
-
-        if self.capture:
-            self.capture_image()
-        return observations
+    # def get_observations(self) -> dict:
+    #     # Observe figurines
+    #     fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
+    #
+    #     # Observe game ball in x-, y-axis
+    #     ball_pos = self._balls.get_world_poses(clone=False)[0]
+    #     ball_pos = ball_pos[:, :2] - self._env_pos[:, :2]
+    #
+    #     if self.apply_kalman_filter:
+    #         self.kalman.predict()
+    #         ball_pos, ball_vel = self.kalman.state[:2], self.kalman.state[2:]
+    #         self.kalman.correct(ball_pos)
+    #     else:
+    #         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
+    #
+    #     self.obs_buf = torch.cat(
+    #         (fig_pos, ball_pos, ball_vel), dim=-1
+    #     )
+    #
+    #     observations = {
+    #         self._robots.name: {
+    #             "obs_buf": self.obs_buf
+    #         }
+    #     }
+    #
+    #     if self.capture:
+    #         self.capture_image()
+    #     return observations
 
     def post_reset(self) -> None:
         self.active_dofs = []

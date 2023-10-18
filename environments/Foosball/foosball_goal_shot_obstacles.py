@@ -6,7 +6,7 @@ class FoosballGoalShotObstacleTask(FoosballGoalShotTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
         if not hasattr(self, "_num_observations"):
-            self._num_observations = 9
+            self._num_observations = 11
         if not hasattr(self, "_num_actions"):
             self._num_actions = 2
         if not hasattr(self, "_dof"):

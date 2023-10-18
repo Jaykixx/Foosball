@@ -10,6 +10,7 @@ from rl_games.algos_torch import torch_ext
 import torch
 import numpy as np
 import torch.nn as nn
+from functorch import combine_state_for_ensemble, vmap
 
 from utilities.models import DMP
 
@@ -161,8 +162,8 @@ class NDPA2CBuilder(NetworkBuilder):
                 self.critic_mlp = self._build_mlp(**mlp_args)
 
             # Add multiple heads for critic in accordance with DMP steps
-            self.value_heads = nn.ModuleList([torch.nn.Linear(out_size, self.value_size) for _ in range(self.steps_per_seq)])
-            # self.value_heads = torch.nn.Linear(out_size, self.value_size * self.steps_per_seq)
+            # self.value_heads = nn.ModuleList([torch.nn.Linear(out_size, self.value_size) for _ in range(self.steps_per_seq)])
+            self.value_heads = torch.nn.Linear(out_size, self.value_size * self.steps_per_seq)
             self.value_act = self.activations_factory.create(self.value_activation)
 
             self.mu = torch.nn.Linear(out_size, mlp_output_shape)
@@ -228,7 +229,7 @@ class NDPA2CBuilder(NetworkBuilder):
                 a_out = self.actor_cnn(a_out)
                 a_out = a_out.contiguous().view(a_out.size(0), -1)
 
-                c_out = dmp_init_obs
+                c_out = obs
                 c_out = self.critic_cnn(c_out)
                 c_out = c_out.contiguous().view(c_out.size(0), -1)
 
@@ -238,12 +239,10 @@ class NDPA2CBuilder(NetworkBuilder):
                     a_out = self.actor_mlp(a_out)
                     c_out = self.critic_mlp(c_out)
 
-                value = torch.zeros((*c_out.shape[:-1], 1), dtype=c_out.dtype, device=c_out.device)
-                for i, head in enumerate(self.value_heads):
-                    mask = seq_step == i
-                    est = self.value_act(head(c_out[mask]))
-                    value[mask] = est
-                value = self.value_act(value)
+                values = self.value_heads(c_out).T
+                idx = seq_step * len(seq_step) + torch.arange(0, len(seq_step), 1, device=seq_step.device, dtype=seq_step.dtype)
+
+                value = self.value_act(values.reshape(-1, 1)[idx])
 
                 mu_params = self.mu_act(self.mu(a_out))
                 self.initialize(obs_dict, mu_params)
@@ -259,7 +258,7 @@ class NDPA2CBuilder(NetworkBuilder):
                 a_out = self.actor_cnn(a_out)
                 a_out = a_out.flatten(1)
 
-                c_out = dmp_init_obs
+                c_out = obs
                 c_out = self.actor_cnn(c_out)
                 c_out = c_out.flatten(1)
 
@@ -269,12 +268,10 @@ class NDPA2CBuilder(NetworkBuilder):
                     a_out = self.actor_mlp(a_out)
                     c_out = self.actor_mlp(c_out)
 
-                value = torch.zeros((*c_out.shape[:-1], 1), dtype=c_out.dtype, device=c_out.device)
-                for i, head in enumerate(self.value_heads):
-                    mask = seq_step == i
-                    est = self.value_act(head(c_out[mask]))
-                    value[mask] = est
-                value = self.value_act(value)
+                values = self.value_heads(c_out).T
+                idx = seq_step * len(seq_step) + torch.arange(0, len(seq_step), 1, device=seq_step.device, dtype=seq_step.dtype)
+
+                value = self.value_act(values.reshape(-1, 1)[idx])
 
                 if self.central_value:
                     return value, states
