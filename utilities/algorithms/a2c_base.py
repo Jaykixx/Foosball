@@ -27,7 +27,7 @@ class CustomA2CBase(A2CBase):
     def load_networks(self, params):
         builder = model_builder.CustomModelBuilder()
         self.config['network'] = builder.load(params)
-        has_central_value_net = self.config.get('central_value_config') is not  None
+        has_central_value_net = self.config.get('central_value_config') is not None
         if has_central_value_net:
             print('Adding Central Value Network')
             if 'model' not in params['config']['central_value_config']:
@@ -208,10 +208,13 @@ class CustomA2CBase(A2CBase):
         mb_fdones = self.experience_buffer.tensor_dict['dones'].float()
         mb_values = self.experience_buffer.tensor_dict['values']
         mb_rewards = self.experience_buffer.tensor_dict['rewards']
+        mb_obses = self.experience_buffer.tensor_dict['obses'].clone()
+        mb_next_obses = torch.cat((mb_obses[1:], self.obs['obs'].unsqueeze(0)))
         mb_advs = self.discount_values(fdones, last_values, mb_fdones, mb_values, mb_rewards)
         mb_returns = mb_advs + mb_values
 
         batch_dict = self.experience_buffer.get_transformed_list(swap_and_flatten01, self.tensor_list)
+        batch_dict['next_obses'] = swap_and_flatten01(mb_next_obses)
         batch_dict['returns'] = swap_and_flatten01(mb_returns)
         batch_dict['played_frames'] = self.batch_size
         batch_dict['step_time'] = step_time
@@ -251,9 +254,6 @@ class ContinuousA2CBase(CustomA2CBase):
 
         if self.is_ndp:
             self.tensor_list += ['dmp_init_obs', 'progress_buf']
-
-        if hasattr(self.model, "init_tensors"):
-            self.model.init_tensors(self.device)
 
     def train_epoch(self):
         super().train_epoch()
@@ -328,6 +328,24 @@ class ContinuousA2CBase(CustomA2CBase):
         return batch_dict['step_time'], play_time, update_time, total_time, \
                a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul
 
+    def _compute_advantages(self, returns, values, rnn_masks):
+        advantages = returns - values
+        advantages = torch.sum(advantages, axis=1)
+
+        if self.normalize_advantage:
+            if self.is_rnn:
+                if self.normalize_rms_advantage:
+                    advantages = self.advantage_mean_std(advantages, mask=rnn_masks)
+                else:
+                    advantages = torch_ext.normalization_with_masks(advantages, rnn_masks)
+            else:
+                if self.normalize_rms_advantage:
+                    advantages = self.advantage_mean_std(advantages)
+                else:
+                    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        return advantages
+
     def prepare_dataset(self, batch_dict):
         obses = batch_dict['obses']
         returns = batch_dict['returns']
@@ -343,27 +361,13 @@ class ContinuousA2CBase(CustomA2CBase):
             dmp_init_obs = batch_dict['dmp_init_obs']
             progress_buf = batch_dict['progress_buf']
 
-        advantages = returns - values
+        advantages = self._compute_advantages(returns, values, rnn_masks)
 
         if self.normalize_value:
             self.value_mean_std.train()
             values = self.value_mean_std(values)
             returns = self.value_mean_std(returns)
             self.value_mean_std.eval()
-
-        advantages = torch.sum(advantages, axis=1)
-
-        if self.normalize_advantage:
-            if self.is_rnn:
-                if self.normalize_rms_advantage:
-                    advantages = self.advantage_mean_std(advantages, mask=rnn_masks)
-                else:
-                    advantages = torch_ext.normalization_with_masks(advantages, rnn_masks)
-            else:
-                if self.normalize_rms_advantage:
-                    advantages = self.advantage_mean_std(advantages)
-                else:
-                    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         dataset_dict = {}
         dataset_dict['old_values'] = values

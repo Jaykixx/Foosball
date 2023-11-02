@@ -6,28 +6,20 @@ from rl_games.common import datasets
 
 from torch import optim
 import torch
+import numpy as np
+import time
 
 
 class A2CAgent(ContinuousA2CBase):
 
     def __init__(self, base_name, params):
         super(A2CAgent, self).__init__(base_name, params)
-        obs_shape = self.obs_shape
-        build_config = {
-            'actions_num': self.actions_num,
-            'input_shape': obs_shape,
-            'num_seqs': self.num_actors * self.num_agents,
-            'value_size': self.env_info.get('value_size',1),
-            'normalize_value': self.normalize_value,
-            'normalize_input': self.normalize_input
-        }
 
-        self.model = self.network.build(build_config)
-        self.model.to(self.ppo_device)
+        self.build_model()
         self.states = None
         self.init_rnn_from_model(self.model)
         self.last_lr = float(self.last_lr)
-        self.bound_loss_type = self.config.get('bound_loss_type', 'bound') # 'regularisation' or 'bound'
+        self.bound_loss_type = self.config.get('bound_loss_type', 'bound')  # 'regularisation' or 'bound'
         self.optimizer = optim.Adam(
             self.model.parameters(), float(self.last_lr), eps=1e-08, weight_decay=self.weight_decay
         )
@@ -64,6 +56,19 @@ class A2CAgent(ContinuousA2CBase):
         self.has_value_loss = (self.has_central_value and self.use_experimental_cv) \
                               or (not self.has_phasic_policy_gradients and not self.has_central_value)
         self.algo_observer.after_init(self)
+
+    def build_model(self):
+        build_config = {
+            'actions_num': self.actions_num,
+            'input_shape': self.obs_shape,
+            'num_seqs': self.num_actors * self.num_agents,
+            'value_size': self.env_info.get('value_size', 1),
+            'normalize_value': self.normalize_value,
+            'normalize_input': self.normalize_input
+        }
+
+        self.model = self.network.build(build_config)
+        self.model.to(self.ppo_device)
 
     def update_epoch(self):
         self.epoch_num += 1

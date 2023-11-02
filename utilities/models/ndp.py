@@ -10,7 +10,6 @@ from rl_games.algos_torch import torch_ext
 import torch
 import numpy as np
 import torch.nn as nn
-from functorch import combine_state_for_ensemble, vmap
 
 from utilities.models import DMP
 
@@ -22,34 +21,31 @@ class NDP(BaseModel):
         self.network_builder = network
 
     class Network(BaseModelNetwork):
-        def __init__(self, ndp_a2c_network, **kwargs):
+        def __init__(self, a2c_network, **kwargs):
             BaseModelNetwork.__init__(self, **kwargs)
-            self.ndp_a2c_network = ndp_a2c_network
+            self.a2c_network = a2c_network
 
         @property
         def num_seqs(self):
-            return self.ndp_a2c_network.num_seqs
+            return self.a2c_network.num_seqs
 
         @property
         def dof(self):
-            return self.ndp_a2c_network.dof
+            return self.a2c_network.dof
 
         @property
         def actions_num(self):
-            return self.ndp_a2c_network.num_input_params
+            return self.a2c_network.num_input_params
 
         @property
         def steps_per_seq(self):
-            return self.ndp_a2c_network.steps_per_seq
-
-        def init_tensors(self, device):
-            self.ndp_a2c_network.init_tensors(device)
+            return self.a2c_network.steps_per_seq
 
         def is_rnn(self):
-            return self.ndp_a2c_network.is_rnn()
+            return self.a2c_network.is_rnn()
 
         def get_default_rnn_state(self):
-            return self.ndp_a2c_network.get_default_rnn_state()
+            return self.a2c_network.get_default_rnn_state()
 
         def forward(self, input_dict):
             is_train = input_dict.get('is_train', True)
@@ -58,7 +54,7 @@ class NDP(BaseModel):
             input_dict['unnormed_dmp_init_obs'] = input_dict['dmp_init_obs']
             input_dict['obs'] = self.norm_obs(input_dict['obs'])
             input_dict['dmp_init_obs'] = self.norm_obs(input_dict['dmp_init_obs'])
-            mu, logstd, value, states = self.ndp_a2c_network(input_dict)
+            mu, logstd, value, states = self.a2c_network(input_dict)
             sigma = torch.exp(logstd)
             distr = torch.distributions.Normal(mu, sigma)
             if is_train:
@@ -103,16 +99,18 @@ class NDPA2CBuilder(NetworkBuilder):
     def load(self, params):
         self.params = params
 
-    class Network(NetworkBuilder.BaseNetwork, DMP):
+    class Network(NetworkBuilder.BaseNetwork):
 
         def __init__(self, params, **kwargs):
             NetworkBuilder.BaseNetwork.__init__(self)
-            DMP.__init__(self, params['dmp'], **kwargs)
 
-            mlp_output_shape = self.num_input_params
+            self.dmp_layer = DMP(params['dmp'], **kwargs)
+            mlp_output_shape = self.dmp_layer.num_input_params
             input_shape = kwargs.pop('input_shape')
             self.value_size = kwargs.pop('value_size', 1)
             self.num_seqs = kwargs.pop('num_seqs', 1)
+            self.steps_per_seq = self.dmp_layer.steps_per_seq
+            self.dof = self.dmp_layer.dof
 
             self.load(params)
 
@@ -162,7 +160,6 @@ class NDPA2CBuilder(NetworkBuilder):
                 self.critic_mlp = self._build_mlp(**mlp_args)
 
             # Add multiple heads for critic in accordance with DMP steps
-            # self.value_heads = nn.ModuleList([torch.nn.Linear(out_size, self.value_size) for _ in range(self.steps_per_seq)])
             self.value_heads = torch.nn.Linear(out_size, self.value_size * self.steps_per_seq)
             self.value_act = self.activations_factory.create(self.value_activation)
 
@@ -197,19 +194,14 @@ class NDPA2CBuilder(NetworkBuilder):
             else:
                 sigma_init(self.sigma.weight)
 
-        def initialize(self, obs_dict, parameters, **kwargs):
-            obs = obs_dict['unnormed_dmp_init_obs']
-            y = obs[..., :self.dof]
-
-            DMP.initialize(self, y, parameters)
-
-        def evaluate(self, obs_dict, **kwargs):
+        def forward_dmp(self, obs_dict, parameters):
+            y0 = obs_dict['unnormed_dmp_init_obs'][..., :self.dof]
             obs = obs_dict['unnormed_obs']
             seq_step = obs_dict.get('progress_buf', 1)
             seq_step = (seq_step - 1) % self.steps_per_seq
             y, dy = obs[..., :self.dof], obs[..., self.dof:2*self.dof]
 
-            return DMP.evaluate(self, y, dy, seq_step)
+            return self.dmp_layer(parameters, y0, y, dy, seq_step)
 
         def forward(self, obs_dict):
             obs = obs_dict['obs']
@@ -245,8 +237,7 @@ class NDPA2CBuilder(NetworkBuilder):
                 value = self.value_act(values.reshape(-1, 1)[idx])
 
                 mu_params = self.mu_act(self.mu(a_out))
-                self.initialize(obs_dict, mu_params)
-                mu = self.evaluate(obs_dict)
+                mu = self.forward_dmp(obs_dict, mu_params)
                 if self.fixed_sigma:
                     sigma = mu * 0.0 + self.sigma_act(self.sigma)
                 else:
@@ -277,8 +268,7 @@ class NDPA2CBuilder(NetworkBuilder):
                     return value, states
 
                 mu_params = self.mu_act(self.mu(a_out))
-                self.initialize(obs_dict, mu_params)
-                mu = self.evaluate(obs_dict)
+                mu = self.forward_dmp(obs_dict, mu_params)
                 if self.fixed_sigma:
                     sigma = self.sigma_act(self.sigma)
                 else:

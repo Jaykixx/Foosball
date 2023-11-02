@@ -10,11 +10,11 @@ class FoosballBlockingTask(FoosballTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
         if not hasattr(self, "_num_observations"):
-            self._num_observations = 5
+            self._num_observations = 6
         if not hasattr(self, "_num_actions"):
-            self._num_actions = 1
+            self._num_actions = 2
         if not hasattr(self, "_dof"):
-            self._dof = 1
+            self._dof = 2
 
         super(FoosballBlockingTask, self).__init__(name, sim_config, env, offset)
 
@@ -95,7 +95,7 @@ class FoosballBlockingTask(FoosballTask):
     def post_reset(self) -> None:
         self.active_dofs = []
         self.active_dofs.append(self._robots.get_dof_index("Keeper_W_PrismaticJoint"))
-        # self.active_dofs.append(self._robots.get_dof_index("Keeper_W_RevoluteJoint"))
+        self.active_dofs.append(self._robots.get_dof_index("Keeper_W_RevoluteJoint"))
 
         self.timer = torch.ones(self.num_envs, device=self._device)
 
@@ -138,9 +138,9 @@ class FoosballBlockingTask(FoosballTask):
         # # Regularization of actions
         # self.rew_buf += self._compute_action_regularization()
         #
-        dof_ids = [self._robots.get_dof_index("Keeper_W_RevoluteJoint")]
-        fig_rot = self._robots.get_joint_positions(joint_indices=dof_ids, clone=False)
-        self.rew_buf += 2*torch.mean(torch.cos(fig_rot) - 1, dim=-1)
+        # dof_ids = [self._robots.get_dof_index("Keeper_W_RevoluteJoint")]
+        # fig_rot = self._robots.get_joint_positions(joint_indices=dof_ids, clone=False)
+        # self.rew_buf += 2*torch.mean(torch.cos(fig_rot) - 1, dim=-1)
 
         # fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)[0]
         # fig_pos_rew = torch.exp(-6*fig_pos_dist)

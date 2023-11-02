@@ -34,9 +34,11 @@ def sigmoid(x):
     return torch.sigmoid(x)
 
 
-class DMP:
+class DMP(nn.Module):
 
     def __init__(self, params, **kwargs):
+        nn.Module.__init__(self)
+
         # Simulation parameters
         self.dof = kwargs['actions_num']
         self.num_seqs = kwargs['num_seqs']  # num_envs * num_agents
@@ -60,24 +62,40 @@ class DMP:
 
         self.tau = self.dt * self.steps_per_seq
 
-    def init_tensors(self, device):
-        self.device = device
-        self.temp_spacing = torch.linspace(0, 1, self.num_rbfs, device=device)
-        self.alpha_z = torch.ones((self.num_seqs, self.dof), device=device) * self.hyperparams_scale
-        self.beta = self.alpha_z / 4
-        self.alpha_x = self.alpha_z / 3
-        self.c = torch.einsum('bd, n -> bdn', -self.alpha_x, self.temp_spacing).exp()
-        # self.h = self.num_rbfs / self.c
-        self.h = 1 / (self.c[..., 1:] - self.c[..., :-1]) ** 2
-        self.h = torch.cat((self.h, self.h[..., -1:]), dim=-1)
+        # Register all tensors as buffers for .to() etc. to work
+        temp_spacing = torch.linspace(0, 1, self.num_rbfs)
+        alpha_z = torch.ones((self.num_seqs, self.dof)) * self.hyperparams_scale
+        dmp_weights = torch.zeros((self.num_seqs, self.dof, self.num_rbfs))
 
-        self.dmp_weights = torch.zeros((self.num_seqs, self.dof, self.num_rbfs), device=device)
-        self.g = torch.zeros((self.num_seqs, self.dof), device=device)
+        self.register_buffer('temp_spacing', temp_spacing)
+        self.register_buffer('alpha_z', alpha_z)
+        self.register_buffer('dmp_weights', dmp_weights)
+        self.register_buffer('g', torch.zeros((self.num_seqs, self.dof)))
+        self.register_buffer('y0', torch.zeros((self.num_seqs, self.dof)))
+
         if self.target_crossing:
-            self.dg = torch.zeros((self.num_seqs, self.dof), device=device)
-        self.y0 = torch.zeros((self.num_seqs, self.dof), device=device)
+            self.register_buffer('dg', torch.zeros((self.num_seqs, self.dof)))
 
-    def initialize(self, y, parameters):
+    @property
+    def alpha_x(self):
+        return self.alpha_z / 3
+
+    @property
+    def beta(self):
+        return self.alpha_z / 4
+
+    @property
+    def c(self):
+        return torch.einsum('bd, n -> bdn', -self.alpha_x, self.temp_spacing).exp()
+
+    @property
+    def h(self):
+        # return self.num_rbfs / self._c
+        c = self.c
+        h = 1 / (c[..., 1:] - c[..., :-1]) ** 2
+        return torch.cat((h, h[..., -1:]), dim=-1)
+
+    def initialize(self, y0, parameters):
         dof, n = self.dof, self.num_opt_params
         weights = parameters[..., :-dof-n] * self.weight_scale
         self.dmp_weights = weights.view(-1, dof, self.num_rbfs)
@@ -85,16 +103,11 @@ class DMP:
         if self.target_crossing:
             self.dg = parameters[..., -n:-n+dof]
         if self.opt_hyperparams:
-            f = torch.nn.Softplus()
+            f = torch.nn.ELU()
             # f = torch.nn.ReLU()
             self.alpha_z = f(parameters[..., -dof:]) * self.hyperparams_scale + 1
-            self.beta = self.alpha_z / 4
-            self.alpha_x = self.alpha_z / 3
-            self.c = torch.einsum('bd, n -> bdn', -self.alpha_x, self.temp_spacing).exp()
-            self.h = 1 / (self.c[..., 1:] - self.c[..., :-1]) ** 2
-            self.h = torch.cat((self.h, self.h[..., -1:]), dim=-1)
 
-        self.y0 = y
+        self.y0 = y0
 
     def evaluate(self, y, dy, step):
         t = step[..., None] * self.dt
@@ -102,24 +115,33 @@ class DMP:
         # b = torch.maximum(1 - self.alpha_x * self.dt / self.tau, eps)
         # x = torch.pow(b, t/self.dt)
         x = torch.exp(-self.alpha_x/self.tau * t)
+
         # acceleration progression
         if self.num_rbfs == 0:
             forcing = torch.zeros_like(self.y0, device=self.y0.device)
         else:
             sq_error = torch.pow((x[..., None] - self.c), 2)
             at_x = self.rbf(self.h, sq_error)
-            fraction = torch.einsum('bdn, bdn -> bd', self.dmp_weights, at_x) / at_x.sum(dim=-1)
-            forcing = fraction * x
+            fraction = torch.einsum('bdn, bdn -> bd', self.dmp_weights, at_x)
+            # fraction = torch.bmm(self.dmp_weights, at_x.transpose(1, 2)).diagonal(dim1=-2, dim2=-1)
+            forcing = (fraction / at_x.sum(dim=-1)) * x
         if self.target_crossing:
             g_hat = self.g - self.dg * (1 + (self.tau * torch.log(x))/self.alpha_x)
-            dz = (1 - x) * self.alpha_z * (self.beta * (g_hat - y) + self.tau * (self.dg - dy)) + forcing
+            inner = self.beta * (g_hat - y) + self.tau * (self.dg - dy)
+            dz = (1 - x) * self.alpha_z * inner + forcing
         else:
             # Start- and Goal positions may be equal
-            # dz = self.alpha_z * (self.beta * (self.g - y - (self.g - self.y0) * x + forcing) - self.tau * dy)
+            # inner = self.g - y - (self.g - self.y0) * x + forcing
+            # dz = self.alpha_z * (self.beta * inner - self.tau * dy)
 
             # Traditional
-            dz = self.alpha_z * (self.beta * (self.g - y) - self.tau * dy) + (self.g - self.y0) * forcing
+            inner = self.beta * (self.g - y) - self.tau * dy
+            dz = self.alpha_z * inner + (self.g - self.y0) * forcing
         return y + (dy + dz * self.dt / self.tau**2) * self.dt
+
+    def forward(self, parameters, y0, y, dy, step):
+        self.initialize(y0, parameters)
+        return self.evaluate(y, dy, step)
 
     # def reset_idx(self, ids, y, parameters):
     #     dof, n = self.dof, self.num_opt_params
@@ -142,14 +164,15 @@ class DMP:
 
 if __name__ == '__main__':
     params = {'dt': 1 / 120,
+              'controlFrequencyInv': 2,
               'steps': 10,
               'kernel': 'gaussian',
               'numRBFs': 20,
               'weight_scale': 1,
               'alpha_x_scale': 1,
-              'hyperparams_scale': 1,
-              'optimize_alpha_x': True,
-              'optimize_alpha_z': True,
+              'hyperparameter_scale': 1,
+              'optimize_hyperparameters': True,
+              'target_crossing': False
               }
     kwargs = {'actions_num': 9, 'num_seqs': 4}
     dmp = DMP(params, **kwargs)
