@@ -103,9 +103,9 @@ class DMP(nn.Module):
         if self.target_crossing:
             self.dg = parameters[..., -n:-n+dof]
         if self.opt_hyperparams:
-            f = torch.nn.ELU()
+            f = torch.nn.ELU(inplace=True)
             # f = torch.nn.ReLU()
-            self.alpha_z = f(parameters[..., -dof:]) * self.hyperparams_scale + 1
+            self.alpha_z = f(parameters[..., -dof:]) * self.hyperparams_scale + 2
 
         self.y0 = y0
 
