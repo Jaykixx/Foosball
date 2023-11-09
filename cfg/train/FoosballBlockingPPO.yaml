@@ -2,7 +2,7 @@ params:
   seed: ${...seed}
 
   algo:
-    name: a2c_continuous
+    name: wocar_a2c_continuous
 
   model:
     name: continuous_a2c_logstd  # continuous_a2c_logstd
@@ -67,9 +67,9 @@ params:
     schedule_type: legacy
     kl_threshold: 0.008
     score_to_win: 100000000
-    max_epochs: ${resolve_default:200,${....max_iterations}}
-    save_best_after: 25
-    save_frequency: 100
+    max_epochs: ${resolve_default:5000,${....max_iterations}}
+    save_best_after: 100
+    save_frequency: 200
     grad_norm: 1.0
     entropy_coef: 0.0
     truncate_grads: True
@@ -81,3 +81,6 @@ params:
     clip_value: True
     seq_len: 4
     bounds_loss_coef: 0.0001
+    # wocar config
+    woc_critic_coef: 0.5  # Regulates conservativeness of policy, default 0.2
+    obs_dist: 0.15  # max observation perturbation distance

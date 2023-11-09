@@ -35,7 +35,7 @@ solver_type: 1 # 0: pgs, 1: tgs
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
 test: False
 # used to set checkpoint path
-checkpoint: ''  # 'runs\FoosballGoalShotObstacle\nn\FoosballGoalShotObstacle.pth'
+checkpoint: ''  # 'runs\FoosballBlocking\nn\FoosballBlocking.pth'
 
 # disables rendering
 headless: True
@@ -53,7 +53,7 @@ wandb_project: 'omniisaacgymenvs'
 
 # set default task and default training config based on task
 defaults:
-  - task: FoosballGoalShotObstacle # FoosballBlocking
+  - task: FoosballBlocking # FoosballBlocking
   - train: ${task}PPO
   - hydra/job_logging: disabled
 

@@ -33,12 +33,12 @@ solver_type: 1 # 0: pgs, 1: tgs
 
 # RLGames Arguments
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
-test: True
+test: False
 # used to set checkpoint path
-checkpoint: 'runs\FoosballSelfPlay\nn\FoosballSelfPlay.pth'  # runs\FoosballSelfPlay\nn\FoosballSelfPlay.pth
+checkpoint: ''  # runs\FoosballSelfPlay\nn\FoosballSelfPlay.pth
 
 # disables rendering
-headless: False
+headless: True
 capture: False  # Only works for foosball without headless mode!
 # enables native livestream
 enable_livestream: False
@@ -53,7 +53,7 @@ wandb_project: 'omniisaacgymenvs'
 
 # set default task and default training config based on task
 defaults:
-  - task: FoosballSelfPlay
+  - task: FoosballKeeperSelfPlay
   - train: ${task}PPO
   - hydra/job_logging: disabled
 
