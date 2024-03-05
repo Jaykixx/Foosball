@@ -3,21 +3,18 @@ from omniisaacgymenvs.utils.hydra_cfg.reformat import omegaconf_to_dict, print_d
 from omniisaacgymenvs.utils.rlgames.rlgames_utils import RLGPUAlgoObserver, RLGPUEnv
 from omniisaacgymenvs.utils.config_utils.path_utils import retrieve_checkpoint_path
 
-import hydra
-from omegaconf import DictConfig
-
-from rl_games.common import env_configurations, vecenv
+from environments.env_base import CustomVecEnvRLGames, SelfPlayRLGPUEnv
 from utilities.custom_runner import CustomRunner as Runner
-import os
-import datetime
-
-from environments.env_base import CustomVecEnvRLGames
+from rl_games.common import env_configurations, vecenv
 from utilities.task_util import initialize_task
-import utilities.models.agents as agents
-import utilities.models.players as players
+
+from omegaconf import DictConfig
+import datetime
+import hydra
+import os
 
 
-class RLGTrainer():
+class RLGTrainer:
     def __init__(self, cfg, cfg_dict):
         self.cfg = cfg
         self.cfg_dict = cfg_dict
@@ -29,11 +26,18 @@ class RLGTrainer():
         self.cfg_dict["task"]["test"] = self.cfg.test
 
         # register the rl-games adapter to use inside the runner
-        vecenv.register('RLGPU',
-                        lambda config_name,
-                        num_actors,
-                        **kwargs: RLGPUEnv(config_name, num_actors, **kwargs)
-        )
+        if "SelfPlay" in self.cfg_dict["task_name"]:
+            vecenv.register('RLGPU',
+                            lambda config_name,
+                            num_actors,
+                            **kwargs: SelfPlayRLGPUEnv(config_name, num_actors, **kwargs)
+            )
+        else:
+            vecenv.register('RLGPU',
+                            lambda config_name,
+                           num_actors,
+                           **kwargs: RLGPUEnv(config_name, num_actors, **kwargs)
+            )
         env_configurations.register('rlgpu', {
             'vecenv_type': 'RLGPU',
             'env_creator': lambda **kwargs: env
@@ -44,7 +48,6 @@ class RLGTrainer():
     def run(self):
         # create runner and set the settings
         runner = Runner(RLGPUAlgoObserver())
-
         runner.load(self.rlg_config_dict)
         runner.reset()
 
