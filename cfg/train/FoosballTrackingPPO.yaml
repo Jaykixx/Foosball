@@ -2,10 +2,10 @@ params:
   seed: ${...seed}
 
   algo:
-    name: a2c_continuous
+    name: a2c_continuous  # wocar_a2c_continuous
 
   model:
-    name: continuous_a2c_logstd  # continuous_a2c_logstd
+    name: continuous_a2c_logstd  # ndp
 
   network:
     name: actor_critic
@@ -81,3 +81,6 @@ params:
     clip_value: True
     seq_len: 4
     bounds_loss_coef: 0.0001
+    # wocar config
+    woc_critic_coef: 0.5  # Regulates conservativeness of policy, default 0.2
+    obs_dist: 0.15  # max observation perturbation distance

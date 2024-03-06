@@ -2,10 +2,10 @@ params:
   seed: ${...seed}
 
   algo:
-    name: wocar_a2c_continuous
+    name: a2c_continuous  # wocar_a2c_continuous
 
   model:
-    name: continuous_a2c_logstd  # continuous_a2c_logstd
+    name: continuous_a2c_logstd  # ndp
 
   network:
     name: actor_critic

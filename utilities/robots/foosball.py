@@ -31,7 +31,7 @@ class Foosball(Robot):
         if self._usd_path is None:
             root_dir = os.path.dirname(os.path.abspath(__file__))
             self._usd_path = os.path.join(
-                root_dir, "../../environments/Foosball/Models/Foosball_Instanceable.usd"
+                root_dir, "usd/Foosball_Instanceable.usd"
             )
 
         self.reference = add_reference_to_stage(self._usd_path, prim_path)
@@ -115,26 +115,3 @@ class Foosball(Robot):
             "Mid_B_PrismaticJoint",
             "Offense_B_PrismaticJoint"
         ]
-
-    def apply_joint_settings(self):
-        drive_type = ["linear"] * 8 + ["angular"] * 8
-        default_dof_pos = [0.0] * 8 + [70.0] * 8
-        stiffness = [1000.0] * 8 + [400*np.pi/180] * 8
-        damping = [50.0] * 8 + [80*np.pi/180] * 8
-        max_force = [70.0] * 8 + [0.47] * 8
-        max_velocity = [4.0] * 8 + [18000.0] * 8
-
-        for i, dof in enumerate(self.dof_paths):
-            set_drive(
-                prim_path=f"{self.prim_path}/{dof}",
-                drive_type=drive_type[i],
-                target_type="position",
-                target_value=default_dof_pos[i],
-                stiffness=stiffness[i],
-                damping=damping[i],
-                max_force=max_force[i]
-            )
-
-            PhysxSchema.PhysxJointAPI(
-                get_prim_at_path(f"{self.prim_path}/{dof}")
-            ).CreateMaxJointVelocityAttr().Set(max_velocity[i])

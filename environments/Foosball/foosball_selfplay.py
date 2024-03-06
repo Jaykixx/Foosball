@@ -17,7 +17,7 @@ class FoosballSelfPlay(FoosballTask):
         if not hasattr(self, "_dof"):
             self._dof = 2 * self._num_actions
         if not hasattr(self, "_num_observations"):
-            self._num_observations = 2 * self._dof + 4
+            self._num_observations = 2 * self._dof + 4  # Players + Ball
 
         super().__init__(name, sim_config, env, offset)
 
@@ -55,7 +55,6 @@ class FoosballSelfPlay(FoosballTask):
         self.inv_obs_buf = torch.zeros_like(self.obs_buf)
 
     def get_observations(self) -> dict:
-        # TODO: Normalize?
         fig_pos = self._robots.get_joint_positions(joint_indices=self.active_dofs, clone=False)
         fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_dofs, clone=False)
         fig_pos_w = fig_pos[:, :self.num_actions]
@@ -131,21 +130,11 @@ class FoosballSelfPlay(FoosballTask):
     def _calculate_metrics(self, ball_pos) -> None:
         super()._calculate_metrics(ball_pos)
 
-        # # Reward closeness to opponent goal
-        # dist_to_b_goal, _ = self._compute_ball_to_goal_distances(ball_pos)
-        # dist_to_goal_rew = torch.exp(-6*dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
-        # self.rew_buf += dist_to_goal_rew
-        #
-        # # Regularization of actions
-        # self.rew_buf += self._compute_action_regularization()
-        #
-        # # Pull figures to ball
-        # fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)
-        # fig_pos_dist = torch.stack(fig_pos_dist)
-        # fig_pos_rew = torch.exp(-6*fig_pos_dist).mean(dim=0)
-        # self.rew_buf += - (1 - fig_pos_rew)
-        #
-        # dofs = ["Keeper_W_RevoluteJoint", "Defense_W_RevoluteJoint", "Mid_W_RevoluteJoint", "Offense_W_RevoluteJoint"]
-        # dof_ids = [self._robots.get_dof_index(dof) for dof in dofs]
-        # fig_rot = self._robots.get_joint_positions(joint_indices=dof_ids, clone=False)
-        # self.rew_buf += 0.1 * torch.mean(torch.cos(fig_rot) - 1, dim=-1)
+        # Optional Reward: Ball near opponent goal
+        self.rew_buf += self._dist_to_goal_reward(ball_pos)
+
+        # Optional Reward: Regularization of actions
+        self.rew_buf += 0.1 * self._compute_action_regularization()
+
+        # Optional Reward: Pull figures to ball
+        self.rew_buf += self._fig_to_ball_reward(ball_pos)

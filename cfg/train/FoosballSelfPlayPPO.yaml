@@ -5,7 +5,7 @@ params:
     name: a2c_continuous
 
   model:
-    name: continuous_a2c_logstd  # ndp
+    name: continuous_a2c_logstd
 
   network:
     name: actor_critic
@@ -71,7 +71,7 @@ params:
     save_best_after: 100
     save_frequency: 500
     grad_norm: 1.0
-    entropy_coef: 0.0
+    entropy_coef: 0.003
     truncate_grads: True
     e_clip: 0.2
     horizon_length: 64  # 64  # 16

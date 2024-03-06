@@ -24,7 +24,7 @@ env:
   num_opponents: 1
 
 sim:
-  dt: 0.0041667  # 0.004167 = 240 Hz - 0.0083 = 120 Hz
+  dt: 0.004167  # 0.004167 = 240 Hz - 0.0083 = 120 Hz
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
   gravity: [0.0, 0.0, -9.81]
   add_ground_plane: True

@@ -65,8 +65,7 @@ class FoosballTrackingTask(FoosballTask):
 
     def _calculate_metrics(self, ball_pos) -> None:
         super()._calculate_metrics(ball_pos)
-        self.rew_buf[:] = 0
+        self.rew_buf[:] = 0  # Ignore accidental goals in favor of tracking
 
-        fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)[0]
-        fig_pos_rew = torch.exp(-fig_pos_dist / 0.08)
-        self.rew_buf += fig_pos_rew
+        # Optional Reward: Pull figures to ball
+        self.rew_buf += self._fig_to_ball_reward(ball_pos)

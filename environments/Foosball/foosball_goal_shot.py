@@ -35,35 +35,6 @@ class FoosballGoalShotTask(FoosballTask):
 
         self._balls.set_velocities(self._init_ball_velocities[env_ids].clone(), indices=indices)
 
-    # def get_observations(self) -> dict:
-    #     # Observe figurines
-    #     fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
-    #
-    #     # Observe game ball in x-, y-axis
-    #     ball_pos = self._balls.get_world_poses(clone=False)[0]
-    #     ball_pos = ball_pos[:, :2] - self._env_pos[:, :2]
-    #
-    #     if self.apply_kalman_filter:
-    #         self.kalman.predict()
-    #         ball_pos, ball_vel = self.kalman.state[:2], self.kalman.state[2:]
-    #         self.kalman.correct(ball_pos)
-    #     else:
-    #         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
-    #
-    #     self.obs_buf = torch.cat(
-    #         (fig_pos, ball_pos, ball_vel), dim=-1
-    #     )
-    #
-    #     observations = {
-    #         self._robots.name: {
-    #             "obs_buf": self.obs_buf
-    #         }
-    #     }
-    #
-    #     if self.capture:
-    #         self.capture_image()
-    #     return observations
-
     def post_reset(self) -> None:
         self.active_dofs = []
         self.active_dofs.append(self._robots.get_dof_index("Keeper_W_PrismaticJoint"))
@@ -71,22 +42,25 @@ class FoosballGoalShotTask(FoosballTask):
 
         super(FoosballGoalShotTask, self).post_reset()
 
+    def _fig_to_ball_reward(self, ball_pos):
+        # Only when Ball is stationary
+        vel = self._balls.get_velocities(clone=False)[:, :2]
+        vel = torch.norm(vel, 2, dim=-1)
+        pull_fig_mask = vel < 0.1
+
+        fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)[0]
+        fig_pos_rew = - (1 - torch.exp(-6 * fig_pos_dist))
+        fig_pos_rew[~pull_fig_mask] = 0
+        return fig_pos_rew
+
     def _calculate_metrics(self, ball_pos) -> None:
         super()._calculate_metrics(ball_pos)
 
-        vel = self._balls.get_velocities(clone=False)[:, :2]
-        vel = torch.norm(vel, 2, dim=-1)
+        # Optional Reward: Ball near opponent goal
+        self.rew_buf += self._dist_to_goal_reward(ball_pos)
 
-        # Award closeness to opponent goal
-        dist_to_b_goal, _ = self._compute_ball_to_goal_distances(ball_pos)
-        dist_to_goal_rew = torch.exp(-6*dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
-        self.rew_buf += dist_to_goal_rew
-
-        # Regularization of actions
+        # Optional Reward: Regularization of actions
         self.rew_buf += 0.1 * self._compute_action_regularization()
 
-        pull_fig_mask = vel < 0.1
-        if torch.sum(pull_fig_mask) > 0:
-            fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)[0]
-            fig_pos_rew = torch.exp(-6*fig_pos_dist)
-            self.rew_buf[pull_fig_mask] += - (1 - fig_pos_rew[pull_fig_mask])
+        # Optional Reward: Pull figures to ball
+        self.rew_buf += self._fig_to_ball_reward(ball_pos)

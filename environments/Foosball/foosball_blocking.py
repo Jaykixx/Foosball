@@ -61,13 +61,10 @@ class FoosballBlockingTask(FoosballTask):
         init_ball_vel[..., 2:] = 0
         self._balls.set_velocities(init_ball_vel, indices=indices)
 
-    def randomize_ball_velocities(self, env_ids):
-        indices = env_ids.to(dtype=torch.int32)
-        device = self.device
-
     def reset_idx(self, env_ids):
         indices = env_ids.to(dtype=torch.int32)
 
+        # Optionally do not reset joints for more diverse starting conditions
         # for id in self.active_dofs:
         #     dof_pos = self._robots.get_joint_positions(joint_indices=[id], clone=False)
         #     dof_vel = self._robots.get_joint_velocities(joint_indices=[id], clone=False)
@@ -135,13 +132,8 @@ class FoosballBlockingTask(FoosballTask):
     def _calculate_metrics(self, ball_pos) -> None:
         super()._calculate_metrics(ball_pos)
 
-        # # Regularization of actions
-        # self.rew_buf += self._compute_action_regularization()
-        #
-        # dof_ids = [self._robots.get_dof_index("Keeper_W_RevoluteJoint")]
-        # fig_rot = self._robots.get_joint_positions(joint_indices=dof_ids, clone=False)
-        # self.rew_buf += 2*torch.mean(torch.cos(fig_rot) - 1, dim=-1)
+        # Optional Reward: Regularization of actions
+        # self.rew_buf += 0.1 * self._compute_action_regularization()
 
-        # fig_pos_dist = self._compute_fig_to_ball_distances(ball_pos)[0]
-        # fig_pos_rew = torch.exp(-6*fig_pos_dist)
-        # self.rew_buf += - (1 - fig_pos_rew)
+        # Optional Reward: Pull figures to ball
+        # self.rew_buf += self._fig_to_ball_reward(ball_pos)

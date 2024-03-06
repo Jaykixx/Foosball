@@ -12,7 +12,7 @@ env:
 
   clipActions: 1.0
 
-  controlFrequencyInv: 6 # x * dt Hz (depends on sim dt)
+  controlFrequencyInv: 6 # x * 1/dt Hz (query policy every x physics steps, depends on sim.dt)
 
   resetPositionNoise: 0.3
   resetVelocityNoise: 5

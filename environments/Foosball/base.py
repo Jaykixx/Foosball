@@ -60,7 +60,7 @@ class FoosballTask(RLTask):
         if not hasattr(self, "kalman"):
             self.apply_kalman_filter = self._task_cfg["env"].get("applyKalmanFiltering", False)
             if self.apply_kalman_filter:
-                n_obs = self._dof - self.num_actions + 2
+                n_obs = self._dof - self.num_actions + 2  # Only on uncontrolled rods and ball
                 self.kalman = KalmanFilter(2 * n_obs, n_obs, self.num_envs, self._device)
 
         self.observations_dofs = []
@@ -227,11 +227,6 @@ class FoosballTask(RLTask):
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
 
         self.actions = actions.clone().to(self.device)
-
-        # self._robots.set_joint_velocity_targets(
-        #     actions * self._robot_vel_limit[:, self.active_dofs], joint_indices=self.active_dofs
-        # )
-
         targets = self.actions * self.dof_range[:, self.active_dofs]/2 + self.dof_offset[:, self.active_dofs]
         targets = torch.clamp(
             targets, self.robot_lower_limit[self.active_dofs], self.robot_upper_limit[self.active_dofs]
@@ -267,7 +262,6 @@ class FoosballTask(RLTask):
         self.observations_dofs += self.active_dofs
 
         self._robots.switch_control_mode('position')
-        # self._robots.switch_control_mode('velocity')
 
         limits = self._robots.get_dof_limits().clone().to(device=self._device)
         self.robot_lower_limit = limits[0, :, 0]
@@ -310,8 +304,7 @@ class FoosballTask(RLTask):
         # Regularization of actions
         action_diff = self.actions - self.old_actions
         action_penalty_w = torch.mean(action_diff[..., :self._num_actions] ** 2, dim=-1)
-        # action_penalty_b = torch.mean(action_diff[..., self._num_actions:] ** 2, dim=-1)
-        return - action_penalty_w  # - action_penalty_b)
+        return - action_penalty_w
 
     def _compute_ball_to_goal_distances(self, ball_pos):
         # Compute distance ball to goal reward
@@ -336,6 +329,16 @@ class FoosballTask(RLTask):
                 distances.append(torch.min(fig_pos_dist, dim=-1)[0])
         return distances
 
+    def _dist_to_goal_reward(self, ball_pos):
+        dist_to_b_goal, dist_to_w_goal = self._compute_ball_to_goal_distances(ball_pos)
+        dist_to_goal_rew = torch.exp(-6 * dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
+        return dist_to_goal_rew
+
+    def _fig_to_ball_reward(self, ball_pos):
+        fig_pos_dist = torch.stack(self._compute_fig_to_ball_distances(ball_pos))
+        fig_pos_rew = - (1 - torch.exp(-6 * fig_pos_dist).mean(0))
+        return fig_pos_rew
+
     def _calculate_metrics(self, ball_pos) -> None:
         self.rew_buf[:] = 0
 
@@ -349,7 +352,6 @@ class FoosballTask(RLTask):
         # Check black goal hit
         mask_x = ball_pos[:, 0] < -0.61725
         win_mask = torch.min(mask_x, mask_y)
-        # win_rew_mask = torch.min(win_mask, self.progress_buf > 12)
         self.rew_buf[win_mask] = 1000
 
         # Check Termination penalty
@@ -375,6 +377,7 @@ class FoosballTask(RLTask):
             self.extras["Win_Rate"] = 0
             self.extras["Loss_Rate"] = 0
 
+        # Counting Glitches for debugging purposes
         debug_cond_x = torch.max(ball_pos[:, 0] < -0.71, ball_pos[:, 0] > 0.71)
         debug_cond_y = torch.max(ball_pos[:, 1] < -0.367, ball_pos[:, 1] > 0.367)
         debug_cond_z = ball_pos[:, 2] < 0.7

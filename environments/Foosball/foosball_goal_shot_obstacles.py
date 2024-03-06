@@ -14,6 +14,36 @@ class FoosballGoalShotObstacleTask(FoosballGoalShotTask):
 
         super(FoosballGoalShotObstacleTask, self).__init__(name, sim_config, env, offset)
 
+    def get_observations(self) -> dict:
+        # Observe figurines
+        fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
+        fig_vel = self._robots.get_joint_velocities(joint_indidces=self.active_dofs, clone=False)
+
+        # Observe game ball in x-, y-axis
+        ball_pos = self._balls.get_world_poses(clone=False)[0]
+        ball_pos = ball_pos[:, :2] - self._env_pos[:, :2]
+
+        if self.apply_kalman_filter:
+            self.kalman.predict()
+            ball_pos, ball_vel = self.kalman.state[:2], self.kalman.state[2:]
+            self.kalman.correct(ball_pos)
+        else:
+            ball_vel = self._balls.get_velocities(clone=False)[:, :2]
+
+        self.obs_buf = torch.cat(
+            (fig_pos, fig_vel, ball_pos, ball_vel), dim=-1
+        )
+
+        observations = {
+            self._robots.name: {
+                "obs_buf": self.obs_buf
+            }
+        }
+
+        if self.capture:
+            self.capture_image()
+        return observations
+
     def post_reset(self) -> None:
         self.passive_defense_dofs = [
             self._robots.get_dof_index("Keeper_B_PrismaticJoint"),
