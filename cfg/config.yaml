@@ -33,14 +33,14 @@ solver_type: 1 # 0: pgs, 1: tgs
 
 # RLGames Arguments
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
-test: True
+test: False
 # used to set checkpoint path
-checkpoint: ''  # 'runs\FoosballBlocking\nn\FoosballBlocking.pth'
+checkpoint: ''  # 'runs/FoosballBlocking/nn/FoosballBlocking.pth'
 # evaluate checkpoint
 evaluation: False
 
 # disables rendering
-headless: False
+headless: True
 capture: False  # Only works for foosball without headless mode!
 # enables native livestream
 enable_livestream: False
@@ -73,7 +73,7 @@ warp: False
 # set default task and default training config based on task
 defaults:
   - _self_
-  - task: FoosballBlocking # FoosballBlocking
+  - task: FoosballBlocking
   - train: ${task}PPO
   - hydra/job_logging: disabled
 

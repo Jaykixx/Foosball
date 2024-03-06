@@ -61,18 +61,19 @@ class CustomA2CBase(A2CBase):
         self.current_rewards = torch.zeros(
             current_rewards_shape, dtype=torch.float32, device=self.ppo_device
         )
-        self.current_lengths = torch.zeros(
-            batch_size, dtype=torch.float32, device=self.ppo_device)
-        self.dones = torch.ones((batch_size,), dtype=torch.uint8, device=self.ppo_device
-                                )
+        self.current_shaped_rewards = torch.zeros(
+            current_rewards_shape, dtype=torch.float32, device=self.ppo_device
+        )
+        self.current_lengths = torch.zeros(batch_size, dtype=torch.float32, device=self.ppo_device)
+        self.dones = torch.ones((batch_size,), dtype=torch.uint8, device=self.ppo_device)
 
         if self.is_rnn:
             self.rnn_states = self.model.get_default_rnn_state()
             self.rnn_states = [s.to(self.ppo_device) for s in self.rnn_states]
 
             total_agents = self.num_agents * self.num_actors
-            num_seqs = self.horizon_length // self.seq_len
-            assert((self.horizon_length * total_agents // self.num_minibatches) % self.seq_len == 0)
+            num_seqs = self.horizon_length // self.seq_length
+            assert((self.horizon_length * total_agents // self.num_minibatches) % self.seq_length == 0)
             self.mb_rnn_states = [
                 torch.zeros(
                     (num_seqs, s.size()[0], total_agents, s.size()[2]),
@@ -181,17 +182,18 @@ class CustomA2CBase(A2CBase):
 
             shaped_rewards = self.rewards_shaper(rewards)
             if self.value_bootstrap and 'time_outs' in infos:
-                shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(
-                    1).float()
+                shaped_rewards += self.gamma * res_dict['values'] * self.cast_obs(infos['time_outs']).unsqueeze(1).float()
 
             self.experience_buffer.update_data('rewards', n, shaped_rewards)
 
             self.current_rewards += rewards
+            self.current_shaped_rewards += shaped_rewards
             self.current_lengths += 1
             all_done_indices = self.dones.nonzero(as_tuple=False)
             env_done_indices = self.dones.view(self.num_actors, self.num_agents).all(dim=1).nonzero(as_tuple=False)
 
             self.game_rewards.update(self.current_rewards[env_done_indices])
+            self.game_shaped_rewards.update(self.current_shaped_rewards[env_done_indices])
             if self.has_self_play_config:
                 self.game_scores.update(infos["battle_won"][env_done_indices])
             self.game_lengths.update(self.current_lengths[env_done_indices])
@@ -200,6 +202,7 @@ class CustomA2CBase(A2CBase):
             not_dones = 1.0 - self.dones.float()
 
             self.current_rewards = self.current_rewards * not_dones.unsqueeze(1)
+            self.current_shaped_rewards = self.current_shaped_rewards * not_dones.unsqueeze(1)
             self.current_lengths = self.current_lengths * not_dones
 
         last_values = self.get_values(self.obs)
@@ -299,7 +302,7 @@ class ContinuousA2CBase(CustomA2CBase):
                     av_kls = kl
                     if self.multi_gpu:
                         dist.all_reduce(kl, op=dist.ReduceOp.SUM)
-                        av_kls /= self.rank_size
+                        av_kls /= self.world_size
                     self.last_lr, self.entropy_coef = self.scheduler.update(
                         self.last_lr, self.entropy_coef, self.epoch_num, 0, av_kls.item()
                     )
@@ -308,7 +311,7 @@ class ContinuousA2CBase(CustomA2CBase):
             av_kls = torch_ext.mean_list(ep_kls)
             if self.multi_gpu:
                 dist.all_reduce(av_kls, op=dist.ReduceOp.SUM)
-                av_kls /= self.rank_size
+                av_kls /= self.world_size
             if self.schedule_type == 'standard':
                 self.last_lr, self.entropy_coef = self.scheduler.update(
                     self.last_lr, self.entropy_coef, self.epoch_num, 0, av_kls.item()
@@ -424,27 +427,21 @@ class ContinuousA2CBase(CustomA2CBase):
             self.dataset.update_values_dict(None)
             should_exit = False
 
-            if self.rank == 0:
-                self.diagnostics.epoch(self, current_epoch=epoch_num)
+            if self.global_rank == 0:
+                self.diagnostics.epoch(self, current_epoch = epoch_num)
                 # do we need scaled_time?
                 scaled_time = self.num_agents * sum_time
                 scaled_play_time = self.num_agents * play_time
-                curr_frames = self.curr_frames * self.rank_size if self.multi_gpu else self.curr_frames
+                curr_frames = self.curr_frames * self.world_size if self.multi_gpu else self.curr_frames
                 self.frame += curr_frames
 
-                if self.print_stats:
-                    step_time = max(step_time, 1e-6)
-                    fps_step = curr_frames / step_time
-                    fps_step_inference = curr_frames / scaled_play_time
-                    fps_total = curr_frames / scaled_time
-                    print(f'fps step: {fps_step:.0f} fps step and policy inference: {fps_step_inference:.0f} '
-                          f'fps total: {fps_total:.0f} epoch: {epoch_num}/{self.max_epochs}')
+                print_statistics(self.print_stats, curr_frames, step_time, scaled_play_time, scaled_time,
+                                epoch_num, self.max_epochs, frame, self.max_frames)
 
-                self.write_stats(
-                    total_time, epoch_num, step_time, play_time, update_time,
-                    a_losses, c_losses, entropies, kls, last_lr, lr_mul, frame,
-                    scaled_time, scaled_play_time, curr_frames
-                )
+                self.write_stats(total_time, epoch_num, step_time, play_time, update_time,
+                                a_losses, c_losses, entropies, kls, last_lr, lr_mul, frame,
+                                scaled_time, scaled_play_time, curr_frames)
+
                 if len(b_losses) > 0:
                     self.writer.add_scalar('losses/bounds_loss', torch_ext.mean_list(b_losses).item(), frame)
 
@@ -453,6 +450,7 @@ class ContinuousA2CBase(CustomA2CBase):
 
                 if self.game_rewards.current_size > 0:
                     mean_rewards = self.game_rewards.get_mean()
+                    mean_shaped_rewards = self.game_shaped_rewards.get_mean()
                     mean_lengths = self.game_lengths.get_mean()
                     self.mean_rewards = mean_rewards[0]
 
@@ -461,6 +459,9 @@ class ContinuousA2CBase(CustomA2CBase):
                         self.writer.add_scalar(rewards_name + '/step'.format(i), mean_rewards[i], frame)
                         self.writer.add_scalar(rewards_name + '/iter'.format(i), mean_rewards[i], epoch_num)
                         self.writer.add_scalar(rewards_name + '/time'.format(i), mean_rewards[i], total_time)
+                        self.writer.add_scalar('shaped_' + rewards_name + '/step'.format(i), mean_shaped_rewards[i], frame)
+                        self.writer.add_scalar('shaped_' + rewards_name + '/iter'.format(i), mean_shaped_rewards[i], epoch_num)
+                        self.writer.add_scalar('shaped_' + rewards_name + '/time'.format(i), mean_shaped_rewards[i], total_time)
 
                     self.writer.add_scalar('episode_lengths/step', mean_lengths, frame)
                     self.writer.add_scalar('episode_lengths/iter', mean_lengths, epoch_num)
@@ -472,7 +473,7 @@ class ContinuousA2CBase(CustomA2CBase):
                     checkpoint_name = self.config['name'] + '_ep_' + str(epoch_num) + '_rew_' + str(mean_rewards[0])
 
                     if self.save_freq > 0:
-                        if (epoch_num % self.save_freq == 0) and (mean_rewards[0] <= self.last_mean_rewards):
+                        if epoch_num % self.save_freq == 0:
                             self.save(os.path.join(self.nn_dir, 'last_' + checkpoint_name))
 
                     if mean_rewards[0] > self.last_mean_rewards and epoch_num >= self.save_best_after:
@@ -482,18 +483,28 @@ class ContinuousA2CBase(CustomA2CBase):
 
                         if 'score_to_win' in self.config:
                             if self.last_mean_rewards > self.config['score_to_win']:
-                                print('Network won!')
+                                print('Maximum reward achieved. Network won!')
                                 self.save(os.path.join(self.nn_dir, checkpoint_name))
                                 should_exit = True
 
-                if epoch_num >= self.max_epochs:
+                if epoch_num >= self.max_epochs and self.max_epochs != -1:
                     if self.game_rewards.current_size == 0:
                         print('WARNING: Max epochs reached before any env terminated at least once')
                         mean_rewards = -np.inf
-                    self.save(os.path.join(
-                        self.nn_dir, 'last_' + self.config['name'] + 'ep' + str(epoch_num) + 'rew' + str(mean_rewards))
-                    )
+
+                    self.save(os.path.join(self.nn_dir, 'last_' + self.config['name'] + '_ep_' + str(epoch_num) \
+                        + '_rew_' + str(mean_rewards).replace('[', '_').replace(']', '_')))
                     print('MAX EPOCHS NUM!')
+                    should_exit = True
+
+                if self.frame >= self.max_frames and self.max_frames != -1:
+                    if self.game_rewards.current_size == 0:
+                        print('WARNING: Max frames reached before any env terminated at least once')
+                        mean_rewards = -np.inf
+
+                    self.save(os.path.join(self.nn_dir, 'last_' + self.config['name'] + '_frame_' + str(self.frame) \
+                        + '_rew_' + str(mean_rewards).replace('[', '_').replace(']', '_')))
+                    print('MAX FRAMES NUM!')
                     should_exit = True
 
                 update_time = 0

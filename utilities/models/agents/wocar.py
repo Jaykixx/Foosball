@@ -34,19 +34,6 @@ class WocaRA2CAgent(A2CAgent):
             self.woc_critic.parameters(), float(self.last_lr), eps=1e-08, weight_decay=self.weight_decay
         )
 
-    def build_model(self):
-        build_config = {
-            'actions_num': self.actions_num,
-            'input_shape': self.obs_shape,
-            'num_seqs': self.num_actors * self.num_agents,
-            'value_size': self.env_info.get('value_size', 1),
-            'normalize_value': self.normalize_value,
-            'normalize_input': self.normalize_input
-        }
-
-        self.model = self.network.build(build_config)
-        self.model.to(self.ppo_device)
-
     @property
     def woc_critic_coef(self):
         return self.woc_critic_coef_target  #  * self.epoch_num / self.max_epochs
@@ -121,7 +108,10 @@ class WocaRA2CAgent(A2CAgent):
         if self.is_rnn:
             rnn_masks = input_dict['rnn_masks']
             batch_dict['rnn_states'] = input_dict['rnn_states']
-            batch_dict['seq_length'] = self.seq_len
+            batch_dict['seq_length'] = self.seq_length
+
+            if self.zero_rnn_on_done:
+                batch_dict['dones'] = input_dict['dones']
 
         with torch.cuda.amp.autocast(enabled=self.mixed_precision):
             res_dict = self.model(batch_dict)
@@ -141,7 +131,7 @@ class WocaRA2CAgent(A2CAgent):
 
             if self.has_value_loss:
                 c_loss = common_losses.critic_loss(
-                    value_preds_batch, values, curr_e_clip, return_batch, self.clip_value
+                    self.model, value_preds_batch, values, curr_e_clip, return_batch, self.clip_value
                 )
             else:
                 c_loss = torch.zeros(1, device=self.ppo_device)

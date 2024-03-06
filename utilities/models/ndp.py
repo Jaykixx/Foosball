@@ -74,7 +74,7 @@ class NDP(BaseModel):
                 neglogp = self.neglogp(selected_action, mu, sigma, logstd)
                 result = {
                     'neglogpacs': torch.squeeze(neglogp),
-                    'values': self.unnorm_value(value),
+                    'values': self.denorm_value(value),
                     'actions': selected_action,
                     'rnn_states': states,
                     'mus': mu,

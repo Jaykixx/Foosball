@@ -12,7 +12,7 @@ env:
 
   clipActions: 1.0
 
-  controlFrequencyInv: 6 # x * 1/dt Hz (query policy every x physics steps, depends on sim.dt)
+  controlFrequencyInv: 4 # x * 1/dt Hz (query policy every x physics steps, depends on sim.dt)
 
   resetPositionNoise: 0.3
   resetVelocityNoise: 5
@@ -23,7 +23,7 @@ env:
   applyKalmanFiltering: False
 
 sim:
-  dt: 0.00277778 # 0.00416667 = 240 Hz - 0.0083 = 120 Hz
+  dt: 0.00416667  # = 240 Hz - 0.0083 = 120 Hz - 0.00277778 = 360 Hz
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
   gravity: [0.0, 0.0, -9.81]
   add_ground_plane: True
