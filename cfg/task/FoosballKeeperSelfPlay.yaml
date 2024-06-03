@@ -21,6 +21,9 @@ env:
   terminationHeight: 0.1
   terminationPenalty: 1000
 
+  winReward: 1000
+  lossPenalty: 1000
+
   num_opponents: 1
 
 sim:

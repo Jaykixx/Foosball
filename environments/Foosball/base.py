@@ -22,7 +22,6 @@ import time
 class FoosballTask(RLTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
-
         self._sim_config = sim_config
         self._cfg = sim_config.config
         self._task_cfg = sim_config.task_config
@@ -37,6 +36,10 @@ class FoosballTask(RLTask):
         # Termination conditions
         self.termination_height = self._task_cfg["env"]["terminationHeight"]
         self.termination_penalty = self._task_cfg["env"]["terminationPenalty"]
+
+        # Win and Loss Rewards
+        self.win_reward = self._task_cfg["env"]["winReward"]
+        self.loss_penalty = self._task_cfg["env"]["lossPenalty"]
 
         phys_dt = self._sim_config.sim_params["dt"]
         self.control_frequency_inv = self._task_cfg["env"]["controlFrequencyInv"]
@@ -59,12 +62,15 @@ class FoosballTask(RLTask):
 
         if not hasattr(self, "kalman"):
             self.apply_kalman_filter = self._task_cfg["env"].get("applyKalmanFiltering", False)
-            if self.apply_kalman_filter:
-                n_obs = self._dof - self.num_actions + 2  # Only on uncontrolled rods and ball
-                self.kalman = KalmanFilter(2 * n_obs, n_obs, self.num_envs, self._device)
+        self.initialize_kalman_filter()
 
         self.observations_dofs = []
         self.old_actions = torch.zeros((self.num_envs, self._dof), device=self._device)
+
+    def initialize_kalman_filter(self):
+        if self.apply_kalman_filter:
+            n_obs = self._dof - self.num_actions + 2  # Only on uncontrolled rods and ball
+            self.kalman = KalmanFilter(2 * n_obs, n_obs, self.num_envs, self._device)
 
     def set_initial_camera_params(self, camera_position=(0, 0, 10),
                                   camera_target=(0, 0, 0)):
@@ -115,6 +121,10 @@ class FoosballTask(RLTask):
 
         # self.create_motion_capture_camera()
 
+        # Correct light settings
+        light = get_prim_at_path("/World/defaultDistantLight")
+        light.GetAttribute("intensity").Set(1000)
+
     def get_game_table(self) -> None:
         self.robot = Foosball(self.default_zero_env_path, device=self.device)
         self._sim_config.apply_articulation_settings(
@@ -141,44 +151,6 @@ class FoosballTask(RLTask):
 
         # physx_rb_api = self._sim_config._get_physx_rigid_body_api(get_prim_at_path(ball_path))
         # physx_rb_api.CreateEnableCCDAttr().Set(True)
-
-    def get_observations(self) -> dict:
-        # Observe figurines
-        fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
-        fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_dofs, clone=False)
-
-        # Observe game ball in x-, y-axis
-        ball_obs = self._balls.get_world_poses(clone=False)[0]
-        ball_obs = ball_obs[:, :2] - self._env_pos[:, :2]
-
-        if self.apply_kalman_filter:
-            self.kalman.predict()
-            kstate = self.kalman.state.clone()
-            ball_pos, ball_vel = kstate[:, :2, 0], kstate[:, 2:, 0] * 60
-            self.kalman.correct(ball_obs.unsqueeze(-1))
-        else:
-            ball_vel = self._balls.get_velocities(clone=False)[:, :2]
-            ball_pos = ball_obs
-
-        # Rescale figure observations
-        offset = self.dof_offset[..., self.observations_dofs]
-        range = self.dof_range[..., self.observations_dofs]
-        fig_pos = 2 * (fig_pos - offset) / range
-        fig_vel = fig_vel / self._robot_vel_limit[..., self.active_dofs]
-
-        self.obs_buf = torch.cat(
-            (fig_pos, fig_vel, ball_pos, ball_vel), dim=-1
-        )
-
-        observations = {
-            self._robots.name: {
-                "obs_buf": self.obs_buf
-            }
-        }
-
-        if self.capture:
-            self.capture_image()
-        return observations
 
     def get_robot(self):
         return self._robots
@@ -223,6 +195,44 @@ class FoosballTask(RLTask):
         init_ball_vel[..., 2:] = 0
         self._balls.set_velocities(init_ball_vel, indices=indices)
 
+    def get_observations(self) -> dict:
+        # Observe figurines
+        fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
+        fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_dofs, clone=False)
+
+        # Observe game ball in x-, y-axis
+        ball_obs = self._balls.get_world_poses(clone=False)[0]
+        ball_obs = ball_obs[:, :2] - self._env_pos[:, :2]
+
+        if self.apply_kalman_filter:
+            self.kalman.predict()
+            kstate = self.kalman.state.clone()
+            ball_pos, ball_vel = kstate[:, :2, 0], kstate[:, 2:, 0] * 60
+            self.kalman.correct(ball_obs.unsqueeze(-1))
+        else:
+            ball_vel = self._balls.get_velocities(clone=False)[:, :2]
+            ball_pos = ball_obs
+
+        # Rescale figure observations
+        # offset = self.dof_offset[..., self.observations_dofs]
+        # range = self.dof_range[..., self.observations_dofs]
+        # fig_pos = 2 * (fig_pos - offset) / range
+        # fig_vel = fig_vel / self._robot_vel_limit[..., self.active_dofs]
+
+        self.obs_buf = torch.cat(
+            (fig_pos, fig_vel, ball_pos, ball_vel), dim=-1
+        )
+
+        observations = {
+            self._robots.name: {
+                "obs_buf": self.obs_buf
+            }
+        }
+
+        if self.capture:
+            self.capture_image()
+        return observations
+
     def pre_physics_step(self, actions) -> None:
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
 
@@ -263,7 +273,7 @@ class FoosballTask(RLTask):
 
         self._robots.switch_control_mode('position')
 
-        limits = self._robots.get_dof_limits().clone().to(device=self._device)
+        limits = self._robots.get_dof_limits().to(device=self._device)
         self.robot_lower_limit = limits[0, :, 0]
         self.robot_upper_limit = limits[0, :, 1]
         self.dof_range = limits[..., 1] - limits[..., 0]
@@ -299,6 +309,9 @@ class FoosballTask(RLTask):
         self.extras["battle_won"] = torch.zeros(self._num_envs,
                                                 device=self._device,
                                                 dtype=torch.long)
+        self.extras["Terminations"] = torch.zeros(self._num_envs,
+                                                  device=self._device,
+                                                  dtype=torch.long)
 
     def _compute_action_regularization(self):
         # Regularization of actions
@@ -347,44 +360,46 @@ class FoosballTask(RLTask):
         # Check white goal hit
         mask_x = 0.61725 < ball_pos[:, 0]
         loss_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[loss_mask] = -1000
+        self.rew_buf[loss_mask] = - self.loss_penalty
 
         # Check black goal hit
         mask_x = ball_pos[:, 0] < -0.61725
         win_mask = torch.min(mask_x, mask_y)
-        self.rew_buf[win_mask] = 1000
+        # win_rew_mask = torch.min(win_mask, self.progress_buf > 12)
+        self.rew_buf[win_mask] = self.win_reward
 
         # Check Termination penalty
         limit = self._init_ball_position[0, 2] + self.termination_height
-        mask_z = ball_pos[:, 2] > limit
-        self.rew_buf[mask_z] = - self.termination_penalty
+        termination_mask = ball_pos[:, 2] > limit
+        self.rew_buf[termination_mask] = - self.termination_penalty
 
         # Check done flags
         goal_mask = torch.max(win_mask, loss_mask)
         length_mask = self.progress_buf >= self._max_episode_length - 1
         self.reset_buf = torch.max(goal_mask, length_mask)
-        self.reset_buf = torch.max(self.reset_buf, mask_z)
+        self.reset_buf = torch.max(self.reset_buf, termination_mask)
 
         self.extras["battle_won"][:] = 0
         self.extras["battle_won"][win_mask] = 1
         self.extras["battle_won"][loss_mask] = -1
+        self.extras["Terminations"][:] = 0.0
+        self.extras["Terminations"][termination_mask] = 1
         if self.reset_buf.sum() > 0:
             self.extras["Games_finished_with_goals"] = goal_mask.sum() / self.reset_buf.sum()
             self.extras["Win_Rate"] = win_mask.sum() / self.reset_buf.sum()
             self.extras["Loss_Rate"] = loss_mask.sum() / self.reset_buf.sum()
         else:
-            self.extras["Games_finished_with_goals"] = 0
-            self.extras["Win_Rate"] = 0
-            self.extras["Loss_Rate"] = 0
+            self.extras["Games_finished_with_goals"] = 0.0
+            self.extras["Win_Rate"] = 0.0
+            self.extras["Loss_Rate"] = 0.0
 
-        # Counting Glitches for debugging purposes
-        debug_cond_x = torch.max(ball_pos[:, 0] < -0.71, ball_pos[:, 0] > 0.71)
-        debug_cond_y = torch.max(ball_pos[:, 1] < -0.367, ball_pos[:, 1] > 0.367)
-        debug_cond_z = ball_pos[:, 2] < 0.7
-        debug_cond = torch.max(torch.max(debug_cond_x, debug_cond_y), debug_cond_z)
-        debug_cond[goal_mask] = 0
-        self.reset_buf = torch.max(self.reset_buf, debug_cond)
-        self.extras["Ended in Glitch"] = debug_cond.sum()
+        # debug_cond_x = torch.max(ball_pos[:, 0] < -0.71, ball_pos[:, 0] > 0.71)
+        # debug_cond_y = torch.max(ball_pos[:, 1] < -0.367, ball_pos[:, 1] > 0.367)
+        # debug_cond_z = ball_pos[:, 2] < 0.7
+        # debug_cond = torch.max(torch.max(debug_cond_x, debug_cond_y), debug_cond_z)
+        # debug_cond[goal_mask] = 0
+        # self.reset_buf = torch.max(self.reset_buf, debug_cond)
+        # self.extras["Ended in Glitch"] = debug_cond.sum()
 
     def calculate_metrics(self) -> None:
         pos = self._balls.get_world_poses(clone=False)[0]

@@ -30,8 +30,9 @@ The execution is otherwise identical to OmniIsaacGymEnvs. For more Information s
 The task names for the various scenarios are:
 - FoosballTracking
 - FoosballBlocking
-- FoosballGoalShot
-- FoosballGoalShotObstacles
+- FoosballScoringIncoming
+- FoosballScoringResting
+- FoosballScoringRestingObstacles
 - FoosballKeeperSelfPlay
 - FoosballSelfPlay
 

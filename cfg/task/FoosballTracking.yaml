@@ -20,6 +20,9 @@ env:
   terminationHeight: 0.1
   terminationPenalty: 0
 
+  winReward: 0
+  lossPenalty: 0
+
 sim:
   dt: 0.004167  # 0.004167 = 240 Hz - 0.0083 = 120 Hz
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}

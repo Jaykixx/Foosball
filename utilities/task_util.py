@@ -1,8 +1,9 @@
 def initialize_task(config, env, init_sim=True):
     # Custom Environments
     from environments.Foosball.foosball_blocking import FoosballBlockingTask
-    from environments.Foosball.foosball_goal_shot import FoosballGoalShotTask
-    from environments.Foosball.foosball_goal_shot_obstacles import FoosballGoalShotObstacleTask
+    from environments.Foosball.foosball_scoring_incoming import FoosballScoringIncomingTask
+    from environments.Foosball.foosball_scoring_resting import FoosballScoringRestingTask
+    from environments.Foosball.foosball_scoring_resting_obstacles import FoosballScoringRestingObstacleTask
     from environments.Foosball.foosball_selfplay import FoosballSelfPlay
     from environments.Foosball.foosball_keeper_selfplay import FoosballKeeperSelfPlay
     from environments.Foosball.foosball_tracking import FoosballTrackingTask
@@ -26,8 +27,9 @@ def initialize_task(config, env, init_sim=True):
         # Custom Environments
         "FoosballTracking": FoosballTrackingTask,
         "FoosballBlocking": FoosballBlockingTask,
-        "FoosballGoalShot": FoosballGoalShotTask,
-        "FoosballGoalShotObstacle": FoosballGoalShotObstacleTask,
+        "FoosballScoringIncoming": FoosballScoringIncomingTask,
+        "FoosballScoringResting": FoosballScoringRestingTask,
+        "FoosballScoringRestingObstacle": FoosballScoringRestingObstacleTask,
         "FoosballSelfPlay": FoosballSelfPlay,
         "FoosballKeeperSelfPlay": FoosballKeeperSelfPlay,
         # Default Environments
