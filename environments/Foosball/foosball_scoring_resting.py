@@ -5,9 +5,6 @@ import torch
 class FoosballScoringRestingTask(FoosballScoringTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
-        if not hasattr(self, "_num_observations"):
-            self._num_observations = 8
-
         super(FoosballScoringRestingTask, self).__init__(name, sim_config, env, offset)
 
         # Reset parameters

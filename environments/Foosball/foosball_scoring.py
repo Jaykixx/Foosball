@@ -10,16 +10,13 @@ class FoosballScoringTask(FoosballTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
         if not hasattr(self, "_num_observations"):
-            self._num_observations = 6
+            self._num_observations = 8
         if not hasattr(self, "_num_actions"):
             self._num_actions = 2
         if not hasattr(self, "_dof"):
             self._dof = 2
 
         super(FoosballScoringTask, self).__init__(name, sim_config, env, offset)
-
-        # Reset parameters
-        self.reset_position_noise = self._task_cfg["env"]["resetPositionNoise"]
 
     def post_reset(self) -> None:
         self.active_dofs = []
