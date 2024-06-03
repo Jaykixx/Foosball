@@ -5,8 +5,9 @@ code changes due to deprecation in newer versions of OmniIsaacGymEnvs.
 This project provides a base of several training scenarios for Foosball:
 - Ball Tracking (White Keeper)
 - Blocking (White Keeper)
-- Goal Shot (White Keeper)
-- Goal Shot with Obstacles (White Keeper + Stationary Opponents)
+- Scoring on incoming ball (White Keeper)
+- Scoring on resting ball (White Keeper)
+- Scoring on resting ball with obstacles (White Keeper + Stationary Opponents)
 - Keeper vs. Keeper with Self Play
 - Full Game with Self Play
 
