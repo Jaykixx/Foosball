@@ -45,4 +45,4 @@ PYTHON_PATH -m tensorboard.main --logdir <path_to_project>/runs/<task_name>/summ
 ```
 
 ## Cite
-TBD
+Moos, Janosch, et al. "Learning to Play Foosball: System and Baselines." 2024 IEEE International Conference on Robotics and Automation (ICRA). IEEE, 2024
