@@ -33,15 +33,15 @@ solver_type: 1 # 0: pgs, 1: tgs
 
 # RLGames Arguments
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
-test: False
+test: True
 # used to set checkpoint path
-checkpoint: ''  # 'runs/FoosballBlocking/nn/FoosballBlocking.pth'
+checkpoint: ''
 # evaluate checkpoint
 evaluation: False
 
 # disables rendering
-headless: True
-capture: False  # Only works for foosball without headless mode!
+headless: False
+capture: False # Only works for foosball without headless mode!
 # enables native livestream
 enable_livestream: False
 # timeout for MT script
@@ -58,14 +58,18 @@ recording_fps: 30
 # directory to save recordings in
 recording_dir: ''
 
+# Not supported
 wandb_activate: False
 wandb_group: ''
-wandb_name: ${train.params.config.name}
+wandb_name: ''  # '${train.params.config.name}
 wandb_entity: ''
 wandb_project: 'omniisaacgymenvs'
 
 # path to a kit app file
 kit_app: ''
+
+# additional kit arguments
+extras: []
 
 # Warp
 warp: False
@@ -73,9 +77,9 @@ warp: False
 # set default task and default training config based on task
 defaults:
   - _self_
-  - task: FoosballBlocking
-  - train: ${task}PPO
-  - hydra/job_logging: disabled
+  - task: FoosballScoringIncoming
+  - train: ${task}PPO  # Options: PPO, ASE
+  - override hydra/job_logging: disabled
 
 # set the directory where the output files get saved
 hydra:

@@ -2,8 +2,11 @@ from rl_games.common.a2c_common import *
 from rl_games.common.experience import ExperienceBuffer
 from rl_games.algos_torch import torch_ext
 
+from utilities.environment.env_configurations import get_extended_env_info
+from utilities.models.low_level_controllers.dmps.dmp_builder import DMPBuilder
 from utilities.models import model_builder
 
+from gym import spaces
 import numpy as np
 import torch
 import time
@@ -11,12 +14,19 @@ import time
 
 class CustomA2CBase(A2CBase):
     """ Wraps the RLGames A2CBase class for customization of the algorithm
-    implementation, e.g. NDP models and robust versions."""
+    implementation, e.g. dmp and robust versions."""
 
     def __init__(self, base_name, params):
         self.model_name = params['model']['name']
-        self.is_ndp = True if self.model_name == 'ndp' else False
-        super(CustomA2CBase, self).__init__(base_name, params)
+
+        # Adjusts save path to match seed setting to avoid override
+        config = params['config']
+        seed = params['seed']
+        config['full_experiment_name'] += r'\Seed_' + f'{seed}'
+
+        A2CBase.__init__(self, base_name, params)
+
+        self.env_info = get_extended_env_info(self.vec_env.env)
         self.game_scores = torch_ext.AverageMeter(1, self.games_to_track).to(
             self.ppo_device)
 
@@ -24,46 +34,24 @@ class CustomA2CBase(A2CBase):
     def _env_progress_buffer(self):
         return self.vec_env.env.progress_buffer
 
-    def load_networks(self, params):
-        builder = model_builder.CustomModelBuilder()
-        self.config['network'] = builder.load(params)
-        has_central_value_net = self.config.get('central_value_config') is not None
-        if has_central_value_net:
-            print('Adding Central Value Network')
-            if 'model' not in params['config']['central_value_config']:
-                params['config']['central_value_config']['model'] = {'name': 'central_value'}
-            network = builder.load(params['config']['central_value_config'])
-            self.config['central_value_config']['network'] = network
+    def get_adjusted_env_info(self):
+        return self.env_info
 
     def init_tensors(self):
         batch_size = self.num_agents * self.num_actors
         algo_info = {
-            'num_actors': self.num_actors,
-            'horizon_length': self.horizon_length,
-            'has_central_value': self.has_central_value,
-            'use_action_masks': self.use_action_masks
+            'num_actors' : self.num_actors,
+            'horizon_length' : self.horizon_length,
+            'has_central_value' : self.has_central_value,
+            'use_action_masks' : self.use_action_masks
         }
-
-        if self.is_ndp:
-            aux_tensor_dict = {
-                'progress_buf': (),
-                'dmp_init_obs': self.env_info['observation_space'].shape,
-            }
-        else:
-            aux_tensor_dict = None
-
-        self.experience_buffer = ExperienceBuffer(
-            self.env_info, algo_info, self.ppo_device, aux_tensor_dict
-        )
+        env_info = self.get_adjusted_env_info()
+        self.experience_buffer = ExperienceBuffer(env_info, algo_info, self.ppo_device)
 
         val_shape = (self.horizon_length, batch_size, self.value_size)
         current_rewards_shape = (batch_size, self.value_size)
-        self.current_rewards = torch.zeros(
-            current_rewards_shape, dtype=torch.float32, device=self.ppo_device
-        )
-        self.current_shaped_rewards = torch.zeros(
-            current_rewards_shape, dtype=torch.float32, device=self.ppo_device
-        )
+        self.current_rewards = torch.zeros(current_rewards_shape, dtype=torch.float32, device=self.ppo_device)
+        self.current_shaped_rewards = torch.zeros(current_rewards_shape, dtype=torch.float32, device=self.ppo_device)
         self.current_lengths = torch.zeros(batch_size, dtype=torch.float32, device=self.ppo_device)
         self.dones = torch.ones((batch_size,), dtype=torch.uint8, device=self.ppo_device)
 
@@ -74,75 +62,20 @@ class CustomA2CBase(A2CBase):
             total_agents = self.num_agents * self.num_actors
             num_seqs = self.horizon_length // self.seq_length
             assert((self.horizon_length * total_agents // self.num_minibatches) % self.seq_length == 0)
-            self.mb_rnn_states = [
-                torch.zeros(
-                    (num_seqs, s.size()[0], total_agents, s.size()[2]),
-                    dtype=torch.float32, device=self.ppo_device
-                ) for s in self.rnn_states
-            ]
+            self.mb_rnn_states = [torch.zeros((num_seqs, s.size()[0], total_agents, s.size()[2]), dtype = torch.float32, device=self.ppo_device) for s in self.rnn_states]
 
-    def get_action_values(self, obs):
-        processed_obs = self._preproc_obs(obs['obs'])
-        self.model.eval()
-        input_dict = {
-            'is_train': False,
-            'prev_actions': None,
-            'obs': processed_obs,
-            'rnn_states': self.rnn_states
-        }
-        if self.is_ndp:
-            proc_dmp_init_obs = self._preproc_obs(obs['dmp_init_obs'])
-            input_dict['dmp_init_obs'] = proc_dmp_init_obs
-            input_dict['progress_buf'] = self._env_progress_buffer
 
-        with torch.no_grad():
-            res_dict = self.model(input_dict)
-            if self.has_central_value:
-                states = obs['states']
-                input_dict = {
-                    'is_train': False,
-                    'states': states,
-                }
-                value = self.get_central_value(input_dict)
-                res_dict['values'] = value
-        return res_dict
-
-    def get_values(self, obs):
-        with torch.no_grad():
-            if self.has_central_value:
-                states = obs['states']
-                self.central_value_net.eval()
-                input_dict = {
-                    'is_train': False,
-                    'states': states,
-                    'actions': None,
-                    'is_done': self.dones,
-                }
-                value = self.get_central_value(input_dict)
-            else:
-                self.model.eval()
-                processed_obs = self._preproc_obs(obs['obs'])
-                input_dict = {
-                    'is_train': False,
-                    'prev_actions': None,
-                    'obs': processed_obs,
-                    'rnn_states': self.rnn_states
-                }
-                if self.is_ndp:
-                    proc_dmp_init_obs = self._preproc_obs(obs['dmp_init_obs'])
-                    input_dict['dmp_init_obs'] = proc_dmp_init_obs
-                    input_dict['progress_buf'] = self._env_progress_buffer
-
-                result = self.model(input_dict)
-                value = result['values']
-            return value
-
-    def env_reset(self):
-        obs = self.vec_env.reset()
-        obs = self.obs_to_tensors(obs)
-        if self.is_ndp:
-            obs['dmp_init_obs'] = obs['obs'].clone()
-        return obs
+    def load_networks(self, params):
+        """ Override to replace model_builder with custom version """
+        builder = model_builder.CustomModelBuilder()
+        self.config['network'] = builder.load(params)
+        has_central_value_net = self.config.get('central_value_config') is not None
+        if has_central_value_net:
+            print('Adding Central Value Network')
+            if 'model' not in params['config']['central_value_config']:
+                params['config']['central_value_config']['model'] = {'name': 'central_value'}
+            network = builder.load(params['config']['central_value_config'])
+            self.config['central_value_config']['network'] = network
 
     def play_steps(self):
         update_list = self.update_list
@@ -158,9 +91,6 @@ class CustomA2CBase(A2CBase):
 
             self.experience_buffer.update_data('obses', n, self.obs['obs'])
             self.experience_buffer.update_data('dones', n, self.dones)
-            if self.is_ndp:
-                self.experience_buffer.update_data('dmp_init_obs', n, self.obs['dmp_init_obs'])
-                self.experience_buffer.update_data('progress_buf', n, self._env_progress_buffer)
 
             for k in update_list:
                 self.experience_buffer.update_data(k, n, res_dict[k])
@@ -172,12 +102,7 @@ class CustomA2CBase(A2CBase):
             self.obs['obs'] = obs['obs']
             self.obs['states'] = obs['states']
 
-            if self.is_ndp:
-                reset_init_obs = (self._env_progress_buffer - 1) % self.model.steps_per_seq == 0
-                self.obs['dmp_init_obs'][reset_init_obs] = obs['obs'][reset_init_obs]
-
             step_time_end = time.time()
-
             step_time += (step_time_end - step_time_start)
 
             shaped_rewards = self.rewards_shaper(rewards)
@@ -195,7 +120,8 @@ class CustomA2CBase(A2CBase):
             self.game_rewards.update(self.current_rewards[env_done_indices])
             self.game_shaped_rewards.update(self.current_shaped_rewards[env_done_indices])
             if self.has_self_play_config:
-                self.game_scores.update(infos["battle_won"][env_done_indices])
+                scores = infos['Successes'] - infos['Failures']
+                self.game_scores.update(scores[env_done_indices])
             self.game_lengths.update(self.current_lengths[env_done_indices])
             self.algo_observer.process_infos(infos, env_done_indices)
 
@@ -228,7 +154,7 @@ class CustomA2CBase(A2CBase):
 class ContinuousA2CBase(CustomA2CBase):
 
     def __init__(self, base_name, params):
-        super(ContinuousA2CBase, self).__init__(base_name, params)
+        CustomA2CBase.__init__(self, base_name, params)
         self.is_discrete = False
         action_space = self.env_info['action_space']
         self.actions_num = action_space.shape[0]
@@ -237,6 +163,23 @@ class ContinuousA2CBase(CustomA2CBase):
         self.clip_actions = self.config.get('clip_actions', True)
         self.actions_low = torch.from_numpy(action_space.low.copy()).float().to(self.ppo_device)
         self.actions_high = torch.from_numpy(action_space.high.copy()).float().to(self.ppo_device)
+
+        self.joint_obs_dimension = self.env_info['joint_observation_space'].shape[0]
+        self.joint_space = self.env_info['joint_space']
+        self.joint_space_low = torch.from_numpy(
+            self.joint_space.low.copy()
+        ).float().to(self.ppo_device)
+        self.joint_space_high = torch.from_numpy(
+            self.joint_space.high.copy()
+        ).float().to(self.ppo_device)
+        self.task_has_gripper = self.env_info.get('has_gripper', False)
+
+        self.apply_dmps = False
+        if 'dmp' in params:
+            self.dmp_config = params['dmp']
+            self.apply_dmps = self.dmp_config.get('active', False)
+            if self.apply_dmps:
+                self.build_dmp_models(params['dmp'])
 
     def preprocess_actions(self, actions):
         if self.clip_actions:
@@ -250,13 +193,65 @@ class ContinuousA2CBase(CustomA2CBase):
 
         return rescaled_actions
 
+    def _get_policy_input_shape(self):
+        return self.obs_shape
+
+    def _get_policy_out_num(self):
+        if self.apply_dmps:
+            return self.dmp.num_input_params + self.task_has_gripper
+        else:
+            return self.actions_num
+
+    def get_adjusted_env_info(self):
+        """ Used to get right dimensions for experience buffer """
+        env_info = self.env_info.copy()
+        env_info['observation_space'] = spaces.Box(
+            np.ones(self._get_policy_input_shape(), dtype=np.float32) * -np.inf,
+            np.ones(self._get_policy_input_shape(), dtype=np.float32) * np.inf,
+        )
+        env_info['action_space'] = spaces.Box(
+            np.ones((self._get_policy_out_num(),), dtype=np.float32) * -1.0,
+            np.ones((self._get_policy_out_num(),), dtype=np.float32) * 1.0,
+        )
+        return env_info
+
     def init_tensors(self):
         super(ContinuousA2CBase, self).init_tensors()
         self.update_list = ['actions', 'neglogpacs', 'values', 'mus', 'sigmas']
         self.tensor_list = self.update_list + ['obses', 'states', 'dones']
 
-        if self.is_ndp:
-            self.tensor_list += ['dmp_init_obs', 'progress_buf']
+    def env_step(self, actions):
+        if self.apply_dmps:  # TODO: Deal with target velocity in Striking DMPs
+            dmp_parameters = actions[..., :-self.actions_num]
+            self.dmp.set_parameters(dmp_parameters)
+            self.vec_env.env.set_low_level_controller(self.dmp)  # TODO: Refractor for multi-dmp-variant
+            actions = actions[..., -self.actions_num:]
+        return CustomA2CBase.env_step(self, actions)
+
+    def build_dmp_models(self, params):
+        dmp_builder = DMPBuilder()
+        kwargs = {
+            'actions_num': self.actions_num - self.task_has_gripper,
+            'num_seqs': self.num_actors * self.num_agents,
+        }
+        self.dmp = dmp_builder.build(params, **kwargs)
+        self.dmp.to(self.ppo_device)
+
+    def build_model(self):
+        policy_input_shape = self._get_policy_input_shape()
+        policy_out_num = self._get_policy_out_num()
+
+        build_config = {
+            'actions_num': policy_out_num,
+            'input_shape': policy_input_shape,
+            'num_seqs': self.num_actors * self.num_agents,
+            'value_size': self.env_info.get('value_size', 1),
+            'normalize_value': self.normalize_value,
+            'normalize_input': self.normalize_input
+        }
+
+        self.model = self.network.build(build_config)
+        self.model.to(self.ppo_device)
 
     def train_epoch(self):
         super().train_epoch()
@@ -351,6 +346,7 @@ class ContinuousA2CBase(CustomA2CBase):
 
     def prepare_dataset(self, batch_dict):
         obses = batch_dict['obses']
+        next_obses = batch_dict['next_obses']
         returns = batch_dict['returns']
         dones = batch_dict['dones']
         values = batch_dict['values']
@@ -360,9 +356,6 @@ class ContinuousA2CBase(CustomA2CBase):
         sigmas = batch_dict['sigmas']
         rnn_states = batch_dict.get('rnn_states', None)
         rnn_masks = batch_dict.get('rnn_masks', None)
-        if self.is_ndp:
-            dmp_init_obs = batch_dict['dmp_init_obs']
-            progress_buf = batch_dict['progress_buf']
 
         advantages = self._compute_advantages(returns, values, rnn_masks)
 
@@ -379,15 +372,12 @@ class ContinuousA2CBase(CustomA2CBase):
         dataset_dict['returns'] = returns
         dataset_dict['actions'] = actions
         dataset_dict['obs'] = obses
+        dataset_dict['next_obs'] = next_obses
         dataset_dict['dones'] = dones
         dataset_dict['rnn_states'] = rnn_states
         dataset_dict['rnn_masks'] = rnn_masks
         dataset_dict['mu'] = mus
         dataset_dict['sigma'] = sigmas
-
-        if self.is_ndp:
-            dataset_dict['dmp_init_obs'] = dmp_init_obs
-            dataset_dict['progress_buf'] = progress_buf
 
         self.dataset.update_values_dict(dataset_dict)
 
@@ -428,7 +418,7 @@ class ContinuousA2CBase(CustomA2CBase):
             should_exit = False
 
             if self.global_rank == 0:
-                self.diagnostics.epoch(self, current_epoch = epoch_num)
+                self.diagnostics.epoch(self, current_epoch=epoch_num)
                 # do we need scaled_time?
                 scaled_time = self.num_agents * sum_time
                 scaled_play_time = self.num_agents * play_time
@@ -436,7 +426,7 @@ class ContinuousA2CBase(CustomA2CBase):
                 self.frame += curr_frames
 
                 print_statistics(self.print_stats, curr_frames, step_time, scaled_play_time, scaled_time,
-                                epoch_num, self.max_epochs, frame, self.max_frames)
+                                 epoch_num, self.max_epochs, frame, self.max_frames)
 
                 self.write_stats(total_time, epoch_num, step_time, play_time, update_time,
                                 a_losses, c_losses, entropies, kls, last_lr, lr_mul, frame,
@@ -470,7 +460,7 @@ class ContinuousA2CBase(CustomA2CBase):
                     if self.has_self_play_config:
                         self.self_play_manager.update(self)
 
-                    checkpoint_name = self.config['name'] + '_ep_' + str(epoch_num) + '_rew_' + str(mean_rewards[0])
+                    checkpoint_name = self.config['name'] + '_ep_' + f'{epoch_num:04d}' + '_rew_' + str(mean_rewards[0])
 
                     if self.save_freq > 0:
                         if epoch_num % self.save_freq == 0:
@@ -491,9 +481,9 @@ class ContinuousA2CBase(CustomA2CBase):
                     if self.game_rewards.current_size == 0:
                         print('WARNING: Max epochs reached before any env terminated at least once')
                         mean_rewards = -np.inf
-
-                    self.save(os.path.join(self.nn_dir, 'last_' + self.config['name'] + '_ep_' + str(epoch_num) \
-                        + '_rew_' + str(mean_rewards).replace('[', '_').replace(']', '_')))
+                    if epoch_num % self.save_freq != 0:
+                        self.save(os.path.join(self.nn_dir, 'last_' + self.config['name'] + '_ep_' + str(epoch_num) \
+                                               + '_rew_' + str(mean_rewards).replace('[', '_').replace(']', '_')))
                     print('MAX EPOCHS NUM!')
                     should_exit = True
 

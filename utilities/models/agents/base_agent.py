@@ -13,7 +13,7 @@ import time
 class A2CAgent(ContinuousA2CBase):
 
     def __init__(self, base_name, params):
-        super(A2CAgent, self).__init__(base_name, params)
+        ContinuousA2CBase.__init__(self, base_name, params)
 
         self.build_model()
         self.states = None
@@ -56,19 +56,6 @@ class A2CAgent(ContinuousA2CBase):
 
         self.has_value_loss = self.use_experimental_cv or not self.has_central_value
         self.algo_observer.after_init(self)
-
-    def build_model(self):
-        build_config = {
-            'actions_num': self.actions_num,
-            'input_shape': self.obs_shape,
-            'num_seqs': self.num_actors * self.num_agents,
-            'value_size': self.env_info.get('value_size', 1),
-            'normalize_value': self.normalize_value,
-            'normalize_input': self.normalize_input
-        }
-
-        self.model = self.network.build(build_config)
-        self.model.to(self.ppo_device)
 
     def update_epoch(self):
         self.epoch_num += 1
@@ -125,12 +112,6 @@ class A2CAgent(ContinuousA2CBase):
             'prev_actions': actions_batch,
             'obs': obs_batch,
         }
-        if self.is_ndp:
-            dmp_init_obs_batch = input_dict['dmp_init_obs']
-            progress_batch = input_dict['progress_buf']
-            proc_dmp_init_obs_batch = self._preproc_obs(dmp_init_obs_batch)
-            batch_dict['dmp_init_obs'] = proc_dmp_init_obs_batch
-            batch_dict['progress_buf'] = progress_batch
 
         rnn_masks = None
         if self.is_rnn:

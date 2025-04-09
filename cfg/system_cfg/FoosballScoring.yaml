@@ -1,0 +1,87 @@
+system:
+  table_config:
+    figures:
+      Keeper_B: [0]
+      Defense_B: [-0.1235, 0.1235]
+      Offense_W: [-0.184, 0, 0.184]
+      Mid_B: [-0.241, -0.1205, 0, 0.1205, 0.241]
+      Mid_W: [-0.241, -0.1205, 0, 0.1205, 0.241]
+      Offense_B: [-0.184, 0, 0.184]
+      Defense_W: [-0.1235, 0.1235]
+      Keeper_W: [0]
+
+  drives:
+    keeper_w_pris_drive:
+      name: "Keeper_W_Pris_Drive"
+      eds_location: "C5-E-2-09.eds"
+      node_id: 1
+      rename_map: ${...rename_map}
+      motion_profiles_cfg: ${...motion_profiles_cfg}
+      command_limits: [-12150, -200]
+      range_of_motion: [-0.12, 0.12]
+      reversed: True  # Inverts motion commands
+    keeper_w_rev_drive:
+      name: "Keeper_W_Rev_Drive"
+      eds_location: "C5-E-2-09.eds"
+      node_id: 2
+      rename_map: ${...rename_map}
+      motion_profiles_cfg: ${...motion_profiles_cfg}
+      command_limits: [-3585, 3585]
+      range_of_motion: [-6.283185, 6.283185]
+      reversed: False  # Inverts motion commands
+
+  rename_map:
+    controlword: "Controlword"
+    statusword: "Statusword"
+    operating_mode: "Modes of operation"
+    target_position: "Target Position"
+    profile_velocity: "Profile velocity"
+    target_velocity: "Target velocity"
+    homing_method: "Homing Method 1"
+    position_actual_value: "Position actual value"
+    velocity_actual_value: "Velocity actual value"
+    switches: "Switch Parameters 1"
+    microstep_resolution: "Microstep Resolution 1"
+
+  motion_profiles_cfg:
+    index: "operating_mode"
+    profiles:
+      no_mode: 0
+      pp: 1
+      pv: 2
+      hm: 6
+      csp: 8
+      csv: 9
+
+  settings:
+    active_drives: ['keeper_w_pris_drive', 'keeper_w_rev_drive'] # In order of actions given
+    control_frequency: 60  # Hz, should be equal to training
+    actuated_rods: ['Keeper_W']
+    opponent_rods: []  # Controlled by human
+    passive_rods: []  # Observed but do not move
+    observe_joints: True  # if True, joint positions are used as observations
+    prediction_steps: 1
+
+object_detection:
+  model: yolov5
+  checkpoint: 'utilities/system_interfaces/foosball/detection_models/Yolo_Parameters_v0s.pt'
+  object_classes: [1]  # classes to look for
+  objects:
+    0:
+      name: figures
+      height: 0.075
+    1:
+      name: ball
+      height: 0.01725
+  save_results: False
+  save_path: 'utilities/system_interfaces/foosball/capture/'
+
+  camera:
+    resolution: [1280, 720]
+    position: [0, 0, 0]
+    rotation: [[1, 0, 0], [0, -1, 0], [0, 0, -1]]
+    fps: ${...system.settings.control_frequency}
+    intrinsic:
+      focal_length: [0.0028, 0.00257]
+      sensor_length: [0.009501, 0.00492]
+    ball: [32, 8.75]

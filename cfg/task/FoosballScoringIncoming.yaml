@@ -6,16 +6,17 @@ physics_engine: ${..physics_engine}
 # if given, will override the device setting in gym.
 env:
   #  numEnvs: ${...num_envs}
-  numEnvs: ${resolve_default:8192,${...num_envs}}
+  numEnvs: ${resolve_default:2,${...num_envs}}
   envSpacing: 3
-  episodeLength: 50
+  episodeLength: 180  # Set for 360 Hz physics
 
   clipActions: 1.0
 
-  controlFrequencyInv: 4 # x * 1/dt Hz (query policy every x physics steps, depends on sim.dt)
+  controlFrequencyInv: 6 # x * 1/dt Hz (query policy every x physics steps, depends on sim.dt)
 
+  resetJointNoise: 0.0
   resetPositionNoise: 0.3
-  resetVelocityNoise: 5
+  resetVelocityNoise: 4
 
   terminationHeight: 0.1
   terminationPenalty: 1000
@@ -24,9 +25,11 @@ env:
   lossPenalty: 1000
 
   applyKalmanFiltering: False
+  applyKinematicConstraints: False  # Applies a jerk limited scurve planner as low level controller
+                                   # Will be overridden if a DMP-based policy is used
 
 sim:
-  dt: 0.00416667  # = 240 Hz - 0.0083 = 120 Hz - 0.00277778 = 360 Hz
+  dt: 0.00277778  # 0.004166 = 240 Hz - 0.0083 = 120 Hz - 0.00277778 = 360 Hz - 0.001111 = 900 Hz
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
   gravity: [0.0, 0.0, -9.81]
   add_ground_plane: True
@@ -56,7 +59,7 @@ sim:
     friction_correlation_distance: 0.025
     enable_sleeping: True
     enable_stabilization: True
-    max_depenetration_velocity: 5.0
+    max_depenetration_velocity: 1000.0
 
     # GPU buffers
     gpu_max_rigid_contact_count: 524288
@@ -83,7 +86,7 @@ sim:
     stabilization_threshold: 0.01
     # per-body
     density: -1
-    max_depenetration_velocity: 5.0
+    max_depenetration_velocity: 1000.0
     # per-shape
     contact_offset: 0.0002
     rest_offset: 0.0
@@ -102,7 +105,7 @@ sim:
     stabilization_threshold: 0.01
     # per-body
     # density: 200
-    max_depenetration_velocity: 5.0
+    max_depenetration_velocity: 1000.0
     # per-shape
     contact_offset: 0.0002
     rest_offset: 0.0

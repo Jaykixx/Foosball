@@ -1,7 +1,6 @@
 from omni.isaac.core.utils.stage import add_reference_to_stage
 from omni.isaac.core.utils.torch import *
-from environments.Foosball.foosball_scoring import FoosballScoringTask
-from utilities.models.dmp import DMP
+from environments.foosball.foosball_scoring import FoosballScoringTask
 from utilities.robots.foosball import Foosball
 import torch
 
@@ -9,45 +8,11 @@ import torch
 class FoosballScoringIncomingTask(FoosballScoringTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
-        if not hasattr(self, "_num_observations"):
-            self._num_observations = 6
-
         FoosballScoringTask.__init__(self, name, sim_config, env, offset)
 
         # Reset parameters
         self.reset_position_noise = self._task_cfg["env"]["resetPositionNoise"]
         self.reset_velocity_noise = self._task_cfg["env"]["resetVelocityNoise"]
-
-    def get_observations(self) -> dict:
-        # Observe figurines
-        fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
-
-        # Observe game ball in x-, y-axis
-        ball_obs = self._balls.get_world_poses(clone=False)[0]
-        ball_obs = ball_obs[:, :2] - self._env_pos[:, :2]
-
-        if self.apply_kalman_filter:
-            self.kalman.predict()
-            kstate = self.kalman.state.clone()
-            ball_pos, ball_vel = kstate[:, :2, 0], kstate[:, 2:, 0] * 60
-            self.kalman.correct(ball_obs.unsqueeze(-1))
-        else:
-            ball_vel = self._balls.get_velocities(clone=False)[:, :2]
-            ball_pos = ball_obs
-
-        self.obs_buf = torch.cat(
-            (fig_pos, ball_pos, ball_vel), dim=-1
-        )
-
-        observations = {
-            self._robots.name: {
-                "obs_buf": self.obs_buf
-            }
-        }
-
-        if self.capture:
-            self.capture_image()
-        return observations
 
     def reset_ball(self, env_ids):
         if self.apply_kalman_filter:

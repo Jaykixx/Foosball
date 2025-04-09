@@ -10,6 +10,8 @@ from pxr import PhysxSchema
 
 
 class Foosball(Robot):
+    joint_dof = 16
+
     def __init__(
             self,
             prim_path: str,
@@ -25,7 +27,7 @@ class Foosball(Robot):
         self._usd_path = usd_path
         self._name = name
 
-        self._position = torch.tensor([1.0, 0.0, 0.0]) if translation is None else translation
+        self._position = torch.tensor([0.0, 0.0, 0.0]) if translation is None else translation
         self._orientation = torch.tensor([0.0, 0.0, 0.0, 1.0]) if orientation is None else orientation
 
         if self._usd_path is None:
@@ -44,7 +46,20 @@ class Foosball(Robot):
             articulation_controller=None,
         )
 
-        self.qdlim = torch.tensor([4.0] * 8 + [100*np.pi] * 8, device=device)
+
+        self.qlim = torch.tensor([
+            [-0.123, -0.179, -0.0615, -0.1185] * 2 + [-2*np.pi] * 8,
+            [ 0.123,  0.179,  0.0615,  0.1185] * 2 + [ 2*np.pi] * 8
+        ], device=device)
+
+        t = 0.01108 * np.pi  # Belt drive transmission factor (r*pi)
+        self.qdlim = torch.tensor([100*t] * 8 + [100*np.pi] * 8, device=device)
+        self.qddlim = torch.tensor([3000*t] * 8 + [3000*np.pi] * 8, device=device)
+        self.qdddlim = torch.tensor([11_667*t] * 8 + [11_667*np.pi] * 8, device=device)
+        # self.qdddlim = torch.tensor([11_667 * t] * 8 + [133_333 * np.pi] * 8, device=device)
+        # Jerk matches real system settings (low due to vibrations)
+
+        self.default_joint_pos = torch.zeros_like(self.qdlim)
 
         self.figure_positions = {
             'Keeper': torch.tensor([0], device=device),

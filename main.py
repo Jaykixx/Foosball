@@ -1,9 +1,9 @@
 from omniisaacgymenvs.utils.hydra_cfg.hydra_utils import *
 from omniisaacgymenvs.utils.hydra_cfg.reformat import omegaconf_to_dict, print_dict
 from omniisaacgymenvs.utils.rlgames.rlgames_utils import RLGPUAlgoObserver, RLGPUEnv
-from omniisaacgymenvs.utils.config_utils.path_utils import retrieve_checkpoint_path
+from omniisaacgymenvs.utils.config_utils.path_utils import retrieve_checkpoint_path, get_experience
 
-from environments.env_base import CustomVecEnvRLGames, SelfPlayRLGPUEnv
+from utilities.environment.env_base import CustomVecEnvRLGames, SelfPlayRLGPUEnv
 from utilities.custom_runner import CustomRunner as Runner
 from rl_games.common import env_configurations, vecenv
 from utilities.task_util import initialize_task
@@ -11,6 +11,7 @@ from utilities.task_util import initialize_task
 from omegaconf import DictConfig
 import datetime
 import hydra
+import sys
 import os
 
 
@@ -29,15 +30,15 @@ class RLGTrainer:
         if "SelfPlay" in self.cfg_dict["task_name"]:
             vecenv.register('RLGPU',
                             lambda config_name,
-                            num_actors,
-                            **kwargs: SelfPlayRLGPUEnv(config_name, num_actors, **kwargs)
-            )
+                                   num_actors,
+                                   **kwargs: SelfPlayRLGPUEnv(config_name, num_actors, **kwargs)
+                            )
         else:
             vecenv.register('RLGPU',
                             lambda config_name,
-                           num_actors,
-                           **kwargs: RLGPUEnv(config_name, num_actors, **kwargs)
-            )
+                                   num_actors,
+                                   **kwargs: RLGPUEnv(config_name, num_actors, **kwargs)
+                            )
         env_configurations.register('rlgpu', {
             'vecenv_type': 'RLGPU',
             'env_creator': lambda **kwargs: env
@@ -65,21 +66,35 @@ class RLGTrainer:
         })
 
 
-@hydra.main(config_name="config", config_path="cfg")
+@hydra.main(version_base=None, config_name="config", config_path="cfg")
 def parse_hydra_configs(cfg: DictConfig):
 
     time_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     headless = cfg.headless
-    rank = int(os.getenv("LOCAL_RANK", "0"))
+
+    # process additional kit arguments and write them to argv
+    if cfg.extras and len(cfg.extras) > 0:
+        sys.argv += cfg.extras
+
+    # local rank (GPU id) in a current multi-gpu mode
+    local_rank = int(os.getenv("LOCAL_RANK", "0"))
+    # global rank (GPU id) in multi-gpu multi-node mode
+    global_rank = int(os.getenv("RANK", "0"))
     if cfg.multi_gpu:
-        cfg.device_id = rank
-        cfg.rl_device = f'cuda:{rank}'
+        cfg.device_id = local_rank
+        cfg.rl_device = f'cuda:{local_rank}'
     enable_viewport = "enable_cameras" in cfg.task.sim and cfg.task.sim.enable_cameras
-    env = CustomVecEnvRLGames(headless=headless,
-                              sim_device=cfg.device_id,
-                              enable_livestream=cfg.enable_livestream,
-                              enable_viewport=enable_viewport
+
+    # select kit app file
+    experience = get_experience(headless, cfg.enable_livestream, enable_viewport, cfg.enable_recording, cfg.kit_app)
+
+    env = CustomVecEnvRLGames(
+        headless=headless,
+        sim_device=cfg.device_id,
+        enable_livestream=cfg.enable_livestream,
+        enable_viewport=enable_viewport,
+        experience=experience
     )
 
     # ensure checkpoints can be specified as relative paths
@@ -93,6 +108,7 @@ def parse_hydra_configs(cfg: DictConfig):
 
     # sets seed. if seed is -1 will pick a random one
     from omni.isaac.core.utils.torch.maths import set_seed
+    cfg.seed = cfg.seed + global_rank if cfg.seed != -1 else cfg.seed
     cfg.seed = set_seed(cfg.seed, torch_deterministic=cfg.torch_deterministic)
     cfg_dict['seed'] = cfg.seed
 

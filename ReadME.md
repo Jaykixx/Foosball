@@ -29,7 +29,6 @@ PYTHON_PATH main.py task=FoosballBlocking
 The execution is otherwise identical to OmniIsaacGymEnvs. For more Information see [Link](https://github.com/NVIDIA-Omniverse/OmniIsaacGymEnvs/tree/release/2023.1.1?tab=readme-ov-file#running-the-examples). Checkpoints will be saved in ``<path_to_project>/runs/<task_name>/nn/``.
 
 The task names for the various scenarios are:
-- FoosballTracking
 - FoosballBlocking
 - FoosballScoringIncoming
 - FoosballScoringResting

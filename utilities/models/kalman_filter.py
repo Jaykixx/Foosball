@@ -3,62 +3,56 @@ import numpy as np
 
 
 class KalmanFilter:
-    def __init__(self, n_s, n_o, num_envs, device='cuda:0'):
-        self.n_s, self.n_o = n_s, n_o
+    def __init__(self, num_obs, num_envs, device='cuda:0'):
+        self.num_state, self.num_obs = 2*num_obs, num_obs
         self.num_envs = num_envs
         self.device = device
-        self.initialize()
 
-    def initialize(self):
-        # contains the state of the system, with n-dimensions
-        self.state = torch.zeros(self.num_envs, self.n_s, 1, device=self.device)
+        self.state = torch.zeros(
+            self.num_envs, self.num_state, device=self.device
+        )
 
-        # contains a possible future state
-        self.future_state = torch.zeros(self.num_envs, self.n_s, 1, device=self.device)
+        # State transition matrix
+        stm = torch.eye(self.num_state, device=self.device)
+        stm += torch.diag(torch.ones(self.num_obs, device=self.device), self.num_obs)
+        self.stm = stm[None].repeat_interleave(self.num_envs, dim=0)
 
-        # contains the state transition matrix in our case it is often the identity matrix
-        self.F = torch.eye(self.n_s, device=self.device) + torch.diag(torch.ones(self.n_o, device=self.device), self.n_o)
-        self.F = self.F[None].repeat_interleave(self.num_envs, dim=0)
+        # Batch Identity matrix
+        eye = torch.eye(n=self.num_state, device=self.device)
+        self.eye = eye[None].repeat_interleave(self.num_envs, dim=0)
 
-        # contains a state transition to a future state
-        self.F_future = torch.eye(n=self.n_s, device=self.device)[None].repeat_interleave(self.num_envs, dim=0)
+        # Covariance of the system state
+        self.eps = self.eye.clone()
 
-        # contains the covariance of the systems state, by identity
-        self.P = torch.eye(n=self.n_s, device=self.device)[None].repeat_interleave(self.num_envs, dim=0)
+        # Process noise
+        self.eta = self.eye.clone()
 
-        # contains the process noise, initalized by identity
-        self.Q = torch.eye(n=self.n_s, device=self.device)[None].repeat_interleave(self.num_envs, dim=0)
+        # Measurement observation matrix
+        h = torch.eye(self.num_obs, self.num_state, device=self.device)
+        self.h = h[None].repeat_interleave(self.num_envs, dim=0)
+        
+        # State uncertainty
+        var = torch.eye(n=self.num_obs, device=self.device)
+        self.var = 0.01 * var[None].repeat_interleave(self.num_envs, dim=0)
 
-        # contains the measurement observation matrix
-        H = np.eye(self.n_o, self.n_s).astype(np.float32)
-        self.H = torch.from_numpy(H).to(self.device)[None].repeat_interleave(self.num_envs, dim=0)
-        # self.H = torch.zeros(self.n_o, self.n_s).to(self.device)
-
-        # contains the state uncertainty
-        self.R = torch.eye(n=self.n_o, device=self.device)[None].repeat_interleave(self.num_envs, dim=0) * 0.01
-
-        # contains the Kalman matrix
-        self.K = torch.zeros(self.num_envs, self.n_s, self.n_o, device=self.device)
-
-        # contains the Identity Matrix
-        self.I = torch.eye(n=self.n_s, device=self.device)[None].repeat_interleave(self.num_envs, dim=0)
+        # Kalman matrix
+        self.k = torch.zeros(
+            self.num_envs, self.num_state, self.num_obs, device=self.device
+        )
 
     def reset_idx(self, env_ids):
         n = len(env_ids)
+        
+        self.state[env_ids] = torch.zeros(
+            n, self.num_state, device=self.device
+        )
 
-        self.state[env_ids] = torch.zeros(n, self.n_s, 1, device=self.device)
-        self.future_state[env_ids] = torch.zeros(n, self.n_s, 1, device=self.device)
-        F = torch.eye(self.n_s, device=self.device) + torch.diag(torch.ones(self.n_o, device=self.device), self.n_o)
-        self.F[env_ids] = F[None].repeat_interleave(n, dim=0)
-        self.F_future[env_ids] = torch.eye(n=self.n_s, device=self.device)[None].repeat_interleave(n, dim=0)
-        self.P[env_ids] = torch.eye(n=self.n_s, device=self.device)[None].repeat_interleave(n, dim=0)
-        self.Q[env_ids] = torch.eye(n=self.n_s, device=self.device)[None].repeat_interleave(n, dim=0)
-        H = np.eye(self.n_o, self.n_s).astype(np.float32)
-        self.H[env_ids] = torch.from_numpy(H).to(self.device)[None].repeat_interleave(n, dim=0)
-        self.R[env_ids] = torch.eye(n=self.n_o, device=self.device)[None].repeat_interleave(n, dim=0) * 0.01
-        self.K[env_ids] = torch.zeros(n, self.n_s, self.n_o, device=self.device)
-        self.I[env_ids] = torch.eye(n=self.n_s, device=self.device)[None].repeat_interleave(n, dim=0)
+        eye = torch.eye(n=self.num_state, device=self.device)
+        self.eps[env_ids] = eye[None].repeat_interleave(n, dim=0)
 
+        self.k[env_ids] = torch.zeros(
+            n, self.num_state, self.num_obs, device=self.device
+        )
 
     def predict(self):
         """
@@ -67,10 +61,10 @@ class KalmanFilter:
         """
 
         # compute the state prediction
-        self.state = self.F @ self.state
+        self.state = torch.einsum("bni, bi -> bn", self.stm, self.state)
 
         # compute the prediction of the covariance P
-        self.P = self.F @ self.P @ self.F.transpose(-2, -1) + self.Q
+        self.eps = self.stm @ self.eps @ self.stm.transpose(-2, -1) + self.eta
 
     def correct(self, z):
         """
@@ -78,14 +72,17 @@ class KalmanFilter:
         :param z: measured state
         :return:
         """
-        inv = torch.linalg.inv(self.H @ self.P @ self.H.transpose(-2, -1) + self.R)
-        self.K = self.P @ self.H.transpose(-2, -1) @ inv
-        self.state = self.state + self.K @ (z - self.H @ self.state)
-        self.P = (self.I - self.K @ self.H) @ self.P
+        inv = torch.linalg.inv(self.h @ self.eps @ self.h.transpose(-2, -1) + self.var)
+        self.k = self.eps @ self.h.transpose(-2, -1) @ inv
+        diff = z - torch.einsum("bni, bi -> bn", self.h, self.state)
+        self.state = self.state + torch.einsum("bin, bn -> bi", self.k, diff)
+        self.eps = (self.eye - self.k @ self.h) @ self.eps
 
     def future_predictions(self, steps):
-        self.future_state = torch.matrix_power(self.F, steps) @ self.state
-        # TODO: add collisions with the wall
-        # checK validity of position find out with which wall the ball collides
-        # update state
-        pass
+        # TODO: add collisions with the wall (Only affects simulation)
+        # check validity of position find out with which wall the ball collides
+        # torch.matrix_power(self.stm, steps) @ self.state ? valid?
+        future_state = self.state.clone()
+        for i in range(steps):
+            future_state = torch.einsum("bni, bi -> bn", self.stm, future_state)
+        return future_state

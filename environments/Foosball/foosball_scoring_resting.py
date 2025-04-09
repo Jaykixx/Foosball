@@ -1,4 +1,4 @@
-from environments.Foosball.foosball_scoring import FoosballScoringTask
+from environments.foosball.foosball_scoring import FoosballScoringTask
 import torch
 
 

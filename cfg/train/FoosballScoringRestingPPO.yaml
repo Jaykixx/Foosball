@@ -1,11 +1,12 @@
 params:
   seed: ${...seed}
+  framework: PPO
 
   algo:
-    name: a2c_continuous  # wocar_a2c_continuous
+    name: a2c_continuous
 
   model:
-    name: continuous_a2c_logstd  # ndp
+    name: continuous_a2c_logstd
 
   network:
     name: actor_critic
@@ -30,16 +31,22 @@ params:
         name: default
       regularizer:
         name: None
-    dmp: # Only for ndp models
-      numRBFs: 25
-      steps: 10
+
+  dmp:  # If active applies dmp in between policy and env
+    active: False
+    type: discrete
+    rbfs:
+      numRBFs: 20
       kernel: "gaussian"
-      target_crossing: True
-      optimize_hyperparameters: True
-      hyperparameter_scale: 1
-      weight_scale: 1
-      dt: ${.....task.sim.dt}
-      controlFrequencyInv: ${.....task.env.controlFrequencyInv}
+    gains:  # Set to beta = alpha_z / 4 and alpha_x = alpha_z / 3
+      fixed: True
+      scale: 1  # if fixed initialized at 1 * scale else scales incoming input
+    tau:
+      fixed: True  # TODO: Implement variable case
+      scale: 1  # if fixed initialized at 1 * scale
+    weight_scale: 1
+    dt: ${....task.sim.dt}
+    controlFrequencyInv: ${....task.env.controlFrequencyInv}
 
   load_checkpoint: ${if:${...checkpoint},True,False} # flag which sets whether to load the checkpoint
   load_path: ${...checkpoint} # path to the checkpoint to load
@@ -67,11 +74,11 @@ params:
     schedule_type: legacy
     kl_threshold: 0.008
     score_to_win: 10000000
-    max_epochs: ${resolve_default:1500,${....max_iterations}}
+    max_epochs: ${resolve_default:1000,${....max_iterations}}
     save_best_after: 100
     save_frequency: 200
     grad_norm: 1.0
-    entropy_coef: 0.001
+    entropy_coef: 0.003
     truncate_grads: True
     e_clip: 0.2
     horizon_length: 16
@@ -82,5 +89,5 @@ params:
     seq_len: 4
     bounds_loss_coef: 0.0001
     # wocar config
-    woc_critic_coef: 0.5  # Regulates conservativeness of policy
-    obs_dist: 0.1  # max observation perturbation distance
+    woc_critic_coef: 0.1  # Regulates conservativeness of policy, default 0.2
+    obs_dist: 0.01  # max observation perturbation distance

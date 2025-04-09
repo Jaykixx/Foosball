@@ -1,7 +1,6 @@
 from omni.isaac.core.utils.stage import add_reference_to_stage
 from omni.isaac.core.utils.torch import *
-from environments.Foosball.base import FoosballTask
-from utilities.models.dmp import DMP
+from environments.foosball.foosball_base import FoosballTask
 from utilities.robots.foosball import Foosball
 import torch
 
@@ -9,8 +8,6 @@ import torch
 class FoosballBlockingTask(FoosballTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
-        if not hasattr(self, "_num_observations"):
-            self._num_observations = 5
         if not hasattr(self, "_num_actions"):
             self._num_actions = 1
         if not hasattr(self, "_dof"):
@@ -61,79 +58,19 @@ class FoosballBlockingTask(FoosballTask):
         init_ball_vel[..., 2:] = 0
         self._balls.set_velocities(init_ball_vel, indices=indices)
 
-    def reset_idx(self, env_ids):
-        indices = env_ids.to(dtype=torch.int32)
-
-        # Optionally do not reset joints for more diverse starting conditions
-        # for id in self.active_dofs:
-        #     dof_pos = self._robots.get_joint_positions(joint_indices=[id], clone=False)
-        #     dof_vel = self._robots.get_joint_velocities(joint_indices=[id], clone=False)
-        #     self._default_joint_pos[env_ids, id] = dof_pos[env_ids, 0]
-        #     self._default_joint_vel[env_ids, id] = dof_vel[env_ids, 0]
-
-        # Reset joint positions and velocities
-        self._robots.set_joint_position_targets(
-            self._default_joint_pos[env_ids], indices=indices
-        )
-        self._robots.set_joint_positions(
-            self._default_joint_pos[env_ids], indices=indices
-        )
-        self._robots.set_joint_velocities(
-            self._default_joint_vel[env_ids], indices=indices
-        )
-
-        self.reset_ball(env_ids)
-
-        self.game_counter[env_ids] += 1
-        self.frame_id[env_ids] = 0
-        self.reset_buf[env_ids] = 0
-        self.progress_buf[env_ids] = 0
-
     def post_reset(self) -> None:
-        self.active_dofs = []
-        self.active_dofs.append(self._robots.get_dof_index("Keeper_W_PrismaticJoint"))
-        # self.active_dofs.append(self._robots.get_dof_index("Keeper_W_RevoluteJoint"))
-
-        self.timer = torch.ones(self.num_envs, device=self._device)
+        self.active_joint_dofs = []
+        self.active_joint_dofs.append(self._robots.get_dof_index("Keeper_W_PrismaticJoint"))
 
         super(FoosballBlockingTask, self).post_reset()
 
-    def get_observations(self) -> dict:
-        # Observe figurines
-        fig_pos = self._robots.get_joint_positions(joint_indices=self.observations_dofs, clone=False)
-
-        # Observe game ball in x-, y-axis
-        ball_obs = self._balls.get_world_poses(clone=False)[0]
-        ball_obs = ball_obs[:, :2] - self._env_pos[:, :2]
-
-        if self.apply_kalman_filter:
-            self.kalman.predict()
-            kstate = self.kalman.state.clone()
-            ball_pos, ball_vel = kstate[:, :2, 0], kstate[:, 2:, 0] * 60
-            self.kalman.correct(ball_obs.unsqueeze(-1))
-        else:
-            ball_vel = self._balls.get_velocities(clone=False)[:, :2]
-            ball_pos = ball_obs
-
-        self.obs_buf = torch.cat(
-            (fig_pos, ball_pos, ball_vel), dim=-1
-        )
-
-        observations = {
-            self._robots.name: {
-                "obs_buf": self.obs_buf
-            }
-        }
-
-        if self.capture:
-            self.capture_image()
-        return observations
-
-    def _calculate_metrics(self, ball_pos) -> None:
-        super()._calculate_metrics(ball_pos)
+    def _calculate_metrics(self):
+        wins, losses, timeouts = super()._calculate_metrics()
 
         # Optional Reward: Regularization of actions
         # self.rew_buf += 0.1 * self._compute_action_regularization()
 
         # Optional Reward: Pull figures to ball
         # self.rew_buf += self._fig_to_ball_reward(ball_pos)
+
+        return wins, losses, timeouts

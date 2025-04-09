@@ -1,6 +1,6 @@
 import torch
 
-from environments.Foosball.foosball_selfplay import FoosballSelfPlay
+from environments.foosball.foosball_selfplay import FoosballSelfPlay
 from utilities.models.kalman_filter import KalmanFilter
 
 
@@ -8,18 +8,18 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
         self._num_agents = 2
-        self._num_actions = 2
-        self._dof = 2 * self._num_actions
-        self._num_observations = 3 * self._num_actions + 4
+        if not hasattr(self, "_num_actions"):
+            self._num_actions = 2
+
         super().__init__(name, sim_config, env, offset)
 
     def _order_joints(self) -> list:
         joint_names = self.robot.dof_paths_W + self.robot.dof_paths_B
         joints = [name for name in joint_names if 'Keeper' in name]
-        active_dofs = []
+        active_joint_dofs = []
         for j in joints:
-            active_dofs.append(self._robots.get_dof_index(j))
-        return active_dofs
+            active_joint_dofs.append(self._robots.get_dof_index(j))
+        return active_joint_dofs
 
     def reset_ball(self, env_ids):
         indices = env_ids.to(dtype=torch.int32)
@@ -43,8 +43,8 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
         self._balls.set_velocities(init_ball_vel, indices=indices)
 
     def get_observations(self) -> dict:
-        fig_pos = self._robots.get_joint_positions(joint_indices=self.active_dofs, clone=False)
-        fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_dofs, clone=False)
+        fig_pos = self._robots.get_joint_positions(joint_indices=self.active_joint_dofs, clone=False)
+        fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
         fig_pos_w = fig_pos[:, :self.num_actions]
         fig_pos_b = fig_pos[:, self.num_actions:]
         fig_vel_w = fig_vel[:, :self.num_actions]
