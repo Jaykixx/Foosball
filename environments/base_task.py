@@ -53,6 +53,11 @@ class BaseTask(RLTask):
                 np.ones(self._num_task_observations, dtype=np.float32) * -np.Inf,
                 np.ones(self._num_task_observations, dtype=np.float32) * np.Inf,
             )
+        if not hasattr(self, "oc_observation_space"):
+            self.task_observation_space = spaces.Box(
+                np.ones((self._num_objects, self._num_object_types + self._num_obs_per_object), dtype=np.float32) * -np.Inf,
+                np.ones((self._num_objects, self._num_object_types + self._num_obs_per_object), dtype=np.float32) * np.Inf,
+            )
 
         # Reset parameters
         self.joint_noise = self._env_cfg["resetJointNoise"]
@@ -73,6 +78,15 @@ class BaseTask(RLTask):
     @property
     def dt(self):
         return self.phys_dt * self.control_frequency_inv
+
+    def cleanup(self) -> None:
+        RLTask.cleanup(self)
+
+        # last dim combines object obs + one hot encoding of type
+        self.oc_obs_buf = self.obs_buf = torch.zeros(
+            (self._num_envs, self._num_objects, self._num_object_types + self._num_obs_per_object),
+            device=self._device, dtype=torch.float
+        )
 
     def set_up_scene(self, scene, **kwargs) -> None:
         RLTask.set_up_scene(self, scene, **kwargs)
@@ -198,8 +212,8 @@ class BaseTask(RLTask):
         elif self.control_mode == 'velocity':
             control_target = torch.clamp(
                 control_target,
-                -self.joint_vel_limits,
-                self.joint_vel_limits
+                -self.joint_vel_limits[:, self.active_joint_dofs],
+                self.joint_vel_limits[:, self.active_joint_dofs]
             )
             self._robots.set_joint_velocity_targets(
                 control_target, joint_indices=self.active_joint_dofs

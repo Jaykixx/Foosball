@@ -1,4 +1,5 @@
 from rl_games.algos_torch.model_builder import *
+from utilities.models.networks.oc_transformer import OCTBuilder
 
 
 class ExtendedNetworkBuilder(NetworkBuilder):
@@ -7,6 +8,7 @@ class ExtendedNetworkBuilder(NetworkBuilder):
         NetworkBuilder.__init__(self)
 
         # Add new networks here
+        self.register_network('oc_transformer', OCTBuilder)
 
     def load(self, params):
         network_name = params['network']['name']

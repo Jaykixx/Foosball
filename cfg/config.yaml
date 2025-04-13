@@ -40,7 +40,7 @@ checkpoint: ''
 evaluation: False
 
 # disables rendering
-headless: False
+headless: True
 capture: False # Only works for foosball without headless mode!
 # enables native livestream
 enable_livestream: False
@@ -77,7 +77,7 @@ warp: False
 # set default task and default training config based on task
 defaults:
   - _self_
-  - task: FoosballScoringIncoming
+  - task: FoosballSelfplay
   - train: ${task}PPO  # Options: PPO, ASE
   - override hydra/job_logging: disabled
 

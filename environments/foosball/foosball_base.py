@@ -33,24 +33,36 @@ class FoosballTask(BaseTask):
             self._num_joint_observations = 2 * self._num_actions
         if not hasattr(self, "_num_observations"):
             self._num_observations = self._num_joint_observations + self._num_task_observations
+        if not hasattr(self, "_num_objects"):
+            # Number of involved figurines + ball
+            self._num_objects = 23
+        if not hasattr(self, "_num_object_types"):
+            # White, Black & Ball
+            self._num_obj_types = 3
+        if not hasattr(self, "_num_obs_per_object"):
+            # Joints/Figurines: Pos, Rot + corresponding velocities
+            # Ball: X, Y Pos + corresponding velocities
+            self._num_obj_features = 6
 
         super(FoosballTask, self).__init__(name, sim_config, env, offset)
 
         # Termination conditions
-        self.termination_height = self._task_cfg["env"]["terminationHeight"]
-        self.termination_penalty = self._task_cfg["env"]["terminationPenalty"]
+        self.termination_height = self._env_cfg["terminationHeight"]
+        self.termination_penalty = self._env_cfg["terminationPenalty"]
 
         # Win and Loss Rewards
-        self.win_reward = self._task_cfg["env"]["winReward"]
-        self.loss_penalty = self._task_cfg["env"]["lossPenalty"]
+        self.win_reward = self._env_cfg["winReward"]
+        self.loss_penalty = self._env_cfg["lossPenalty"]
 
         if not hasattr(self, "kalman"):
-            self.apply_kalman_filter = self._task_cfg["env"].get("applyKalmanFiltering", False)
+            self.apply_kalman_filter = self._env_cfg.get("applyKalmanFiltering", False)
         self.initialize_kalman_filter()
 
         self.observed_dofs = []
+        self.active_joint_dofs = []
+        self.passive_joint_dofs = []
 
-        self._applyKinematicConstraints = self._task_cfg["env"].get("applyKinematicConstraints", False)
+        self._applyKinematicConstraints = self._env_cfg.get("applyKinematicConstraints", False)
         self.scurve_planner = None
 
     @property
@@ -166,9 +178,16 @@ class FoosballTask(BaseTask):
         self._balls.set_velocities(init_ball_vel, indices=indices)
 
     def get_observations(self) -> dict:
-        # Observe figurines
-        fig_pos = self._robots.get_joint_positions(joint_indices=self.observed_dofs, clone=False)
-        fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
+        # Observe Joints
+        dof_pos = self._robots.get_joint_positions(joint_indices=self.active_joint_dofs, clone=False)
+        dof_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
+
+        # Observe Figurines
+        tpos = dof_pos.view(self.num_envs, 2, -1)[:, 0]
+        rpos = dof_pos.view(self.num_envs, 2, -1)[:, 1]
+
+        tvel = dof_vel.view(self.num_envs, 2, -1)[:, 0]
+        rvel = dof_vel.view(self.num_envs, 2, -1)[:, 1]
 
         # Observe game ball in x-, y-axis
         ball_obs = self._balls.get_world_poses(clone=False)[0]
@@ -183,13 +202,20 @@ class FoosballTask(BaseTask):
             ball_vel = self._balls.get_velocities(clone=False)[:, :2]
             ball_pos = ball_obs
 
-        self.obs_buf = torch.cat(
-            (fig_pos, fig_vel, ball_pos, ball_vel), dim=-1
-        )
+        if len(self.passive_joint_dofs):
+            passive_fig_pos = self._robots.get_joint_positions(joint_indices=self.passive_joint_dofs, clone=False)
+            self.obs_buf = torch.cat(
+                (dof_pos, dof_vel, passive_fig_pos, ball_pos, ball_vel), dim=-1
+            )
+        else:
+            self.obs_buf = torch.cat(
+                (dof_pos, dof_vel, ball_pos, ball_vel), dim=-1
+            )
 
         observations = {
             self._robots.name: {
-                "obs_buf": self.obs_buf
+                "obs_buf": self.obs_buf,
+                "oc_obs_buf": self.oc_obs_buf
             }
         }
 

@@ -10,6 +10,9 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
         self._num_agents = 2
         if not hasattr(self, "_num_actions"):
             self._num_actions = 2
+        if not hasattr(self, "_num_objects"):
+            self._num_objects = 3
+
 
         super().__init__(name, sim_config, env, offset)
 

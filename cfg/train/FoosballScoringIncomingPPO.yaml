@@ -9,28 +9,38 @@ params:
     name: continuous_a2c_logstd  # ndp
 
   network:
-    name: actor_critic
+    name: oc_transformer
     separate: False
     space:
       continuous:
         mu_activation: None
         sigma_activation: None
-
         mu_init:
-          name: default
+          name: orthogonal_initializer
+          gain: 0.01
+        value_init:
+          name: orthogonal_initializer
+          gain: 1
         sigma_init:
           name: const_initializer
           val: 0
         fixed_sigma: True
     mlp:
-      units: [256, 128, 64]
-      activation: tanh
-      d2rl: False
-
+      units: [ 128, 128 ]
+      activation: relu
+      d2rl: False  # Ignored by oc_transformer network
       initializer:
         name: default
       regularizer:
         name: None
+
+    transformer: # Only used if name == oc_transformer
+      emb_dim: 128
+      num_heads: 8
+      num_blocks: 3
+      activation: relu
+      dropout_prob: 0.1
+      pooling_type: 'avg'  # 'max'
 
   dmp:  # If active applies dmp in between policy and env
     active: False

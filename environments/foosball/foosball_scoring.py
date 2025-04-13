@@ -12,6 +12,8 @@ class FoosballScoringTask(FoosballTask):
             self._num_actions = 2
         if not hasattr(self, "_dof"):
             self._dof = 2
+        if not hasattr(self, "_num_objects"):
+            self._num_objects = 2
 
         super(FoosballScoringTask, self).__init__(name, sim_config, env, offset)
 

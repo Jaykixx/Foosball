@@ -61,12 +61,12 @@ class FoosballSelfPlay(FoosballTask):
         self.inv_obs_buf = torch.zeros_like(self.obs_buf)
 
     def get_observations(self) -> dict:
-        fig_pos = self._robots.get_joint_positions(joint_indices=self.active_joint_dofs, clone=False)
-        fig_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
-        fig_pos_w = fig_pos[:, :self.num_actions]
-        fig_pos_b = fig_pos[:, self.num_actions:]
-        fig_vel_w = fig_vel[:, :self.num_actions]
-        fig_vel_b = fig_vel[:, self.num_actions:]
+        dof_pos = self._robots.get_joint_positions(joint_indices=self.active_joint_dofs, clone=False)
+        dof_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
+        dof_pos_w = dof_pos[:, :self.num_actions]
+        dof_pos_b = dof_pos[:, self.num_actions:]
+        dof_vel_w = dof_vel[:, :self.num_actions]
+        dof_vel_b = dof_vel[:, self.num_actions:]
 
         # Observe game ball in x-, y-axis
         ball_w_pos = self._balls.get_world_poses(clone=False)[0]
@@ -74,11 +74,11 @@ class FoosballSelfPlay(FoosballTask):
         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
 
         self.obs_buf = torch.cat(
-            (fig_pos_w, fig_vel_w, fig_pos_b, fig_vel_b, ball_pos, ball_vel), dim=-1
+            (dof_pos_w, dof_vel_w, dof_pos_b, dof_vel_b, ball_pos, ball_vel), dim=-1
         )
 
         self.inv_obs_buf = torch.cat(
-            (fig_pos_b, fig_vel_b, fig_pos_w, fig_vel_w, -ball_pos, -ball_vel), dim=-1
+            (dof_pos_b, dof_vel_b, dof_pos_w, dof_vel_w, -ball_pos, -ball_vel), dim=-1
         ).clone()
 
         observations = {

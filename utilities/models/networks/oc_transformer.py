@@ -16,60 +16,76 @@ class OCTBuilder(NetworkBuilder):
             actions_num = kwargs.pop('actions_num')
             input_shape = kwargs.pop('input_shape')
             self.value_size = kwargs.pop('value_size', 1)
-            self.num_seqs = num_seqs = kwargs.pop('num_seqs', 1)
 
             NetworkBuilder.BaseNetwork.__init__(self)
             self.load(params)
 
-            # TODO: Construct Transformer Network
-            # TODO: Meaning of all params?
-            encoder_layer = TransformerEncoderLayer(emb_dim, num_heads,
-                                                    emb_dim, device=device,
-                                                    dropout=0.1, batch_first=True)
-            self.actor_mlp = nn.Sequential(
-                nn.Linear(dims[1], emb_dim, device=device),
-                TransformerEncoder(encoder_layer, num_blocks),
-                nn.Flatten(),
-                nn.Linear(dims[0] * emb_dim, emb_dim, device=device),
-                nn.ReLU(),
-                nn.Linear(emb_dim, emb_dim, device=device),
-                nn.ReLU(),
-            )
-
+            self.actor_mlp = self._build_transformer(input_shape)
             if self.separate:
-                self.critic_mlp = 0
+                self.critic_mlp = self._build_transformer(input_shape)
 
+            mlp_init = self.init_factory.create(**self.initializer)
+            for m in self.modules():
+                if isinstance(m, nn.Linear):
+                    mlp_init(m.weight)
+                    if getattr(m, "bias", None) is not None:
+                        torch.nn.init.zeros_(m.bias)
+
+            out_size = self.units[-1]
             self.mu = torch.nn.Linear(out_size, actions_num)
             self.mu_act = self.activations_factory.create(self.space_config['mu_activation'])
             mu_init = self.init_factory.create(**self.space_config['mu_init'])
             mu_init(self.mu.weight)
+            if getattr(self.mu, "bias", None) is not None:
+                torch.nn.init.zeros_(self.mu.bias)
 
-            if self.fixed_sigma:
-                self.sigma = nn.Parameter(torch.zeros(actions_num, requires_grad=True, dtype=torch.float32),
-                                          requires_grad=True)
-            else:
-                self.sigma = torch.nn.Linear(out_size, actions_num)
-            self.sigma_act = self.activations_factory.create(self.space_config['sigma_activation'])
-            sigma_init = self.init_factory.create(**self.space_config['sigma_init'])
-            if self.fixed_sigma:
-                sigma_init(self.sigma)
-            else:
-                sigma_init(self.sigma.weight)
+            if self.is_continuous:
+                if self.fixed_sigma:
+                    self.sigma = nn.Parameter(torch.zeros(
+                        actions_num, requires_grad=True, dtype=torch.float32
+                    ), requires_grad=True)
+                else:
+                    self.sigma = torch.nn.Linear(out_size, actions_num)
+                self.sigma_act = self.activations_factory.create(self.space_config['sigma_activation'])
+                sigma_init = self.init_factory.create(**self.space_config['sigma_init'])
+                if self.fixed_sigma:
+                    sigma_init(self.sigma)
+                else:
+                    sigma_init(self.sigma.weight)
 
             self.value = self._build_value_layer(out_size, self.value_size)
             self.value_act = self.activations_factory.create(self.value_activation)
+            value_init = self.init_factory.create(**self.space_config['value_init'])
+            value_init(self.value.weight)
+            if getattr(self.value, "bias", None) is not None:
+                torch.nn.init.zeros_(self.value.bias)
 
         def forward(self, obs_dict):
             obs = obs_dict['obs']
             states = obs_dict.get('rnn_states', None)
-            dones = obs_dict.get('dones', None)
-            bptt_len = obs_dict.get('bptt_len', 0)
 
-            # TODO: Implement
             if self.separate:
-                pass
+                a_out = c_out = obs
+                a_out = self.actor_mlp(a_out)
+                c_out = self.critic_mlp(c_out)
             else:
-                pass
+                a_out = self.actor_mlp(obs)
+                c_out = a_out
+
+            value = self.value_act(self.value(c_out))
+            mu = self.mu_act(self.mu(a_out))
+
+            if self.is_discrete:
+                return mu, value, states
+            if self.is_multi_discrete:
+                raise NotImplementedError  # TODO: Fix
+            if self.is_continuous:
+                if self.fixed_sigma:
+                    sigma = mu * 0.0 + self.sigma_act(self.sigma)
+                else:
+                    sigma = self.sigma_act(self.sigma(a_out))
+                return mu, sigma, value, states
+
 
         def is_separate_critic(self):
             return self.separate
@@ -79,14 +95,12 @@ class OCTBuilder(NetworkBuilder):
             self.units = params['mlp']['units']
             self.activation = params['mlp']['activation']
             self.initializer = params['mlp']['initializer']
-            self.norm_only_first_layer = params['mlp'].get('norm_only_first_layer', False)
             self.value_activation = params.get('value_activation', 'None')
             self.normalization = params.get('normalization', None)
-            self.has_space = 'space' in params  # TODO: ???
-            self.central_value = params.get('central_value', False)  # TODO: ???
-            self.joint_obs_actions_config = params.get('joint_obs_actions', None)
 
-            if self.has_space:  # TODO: ???
+            self.has_space = 'space' in params
+            self.joint_obs_actions_config = params.get('joint_obs_actions', None)
+            if self.has_space:
                 self.is_multi_discrete = 'multi_discrete' in params['space']
                 self.is_discrete = 'discrete' in params['space']
                 self.is_continuous = 'continuous' in params['space']
@@ -96,44 +110,68 @@ class OCTBuilder(NetworkBuilder):
                 elif self.is_discrete:
                     self.space_config = params['space']['discrete']
                 elif self.is_multi_discrete:
+                    raise NotImplementedError
                     self.space_config = params['space']['multi_discrete']
             else:
                 self.is_discrete = False
                 self.is_continuous = False
                 self.is_multi_discrete = False
 
+            # Transformer settings
+            self.emb_dim = params['transformer']['emb_dim']
+            self.num_heads = params['transformer']['num_heads']
+            self.num_blocks = params['transformer']['num_blocks']
+            self.dropout_prob = params['transformer']['dropout_prob']
+            self.transformer_activation = params['transformer']['activation']
+            self.pooling_type = params['transformer']['pooling_type']
+
+            self.central_value = False
             self.has_rnn = False
             self.has_cnn = False
 
-    def _build_transformer(
-            self,
-            input_shape,
-            units,
-            activation,
-            dense_func,
-            norm_only_first_layer=False,
-            norm_func_name=None
-    ):
+    def _build_transformer(self, input_shape):
         print('build transformer:', input_shape)
-        in_size = input_shape
         layers = []
-        need_norm = True
-        for unit in units:
-            layers.append(dense_func(in_size, unit))
-            layers.append(self.activations_factory.create(activation))
 
-            if not need_norm:
-                continue
-            if norm_only_first_layer and norm_func_name is not None:
-                need_norm = False
-            if norm_func_name == 'layer_norm':
-                layers.append(torch.nn.LayerNorm(unit))
-            elif norm_func_name == 'batch_norm':
-                layers.append(torch.nn.BatchNorm1d(unit))
+        # Initial
+        layers.append(nn.Linear(input_shape, self.emb_dim))
+
+        # Transformer
+        encoder_layer = TransformerEncoderLayer(
+            d_model=self.emb_dim,
+            nhead=self.num_heads,
+            dim_feedforward=self.emb_dim,
+            activation=self.transformer_activation,
+            dropout=self.dropout_prob,
+            batch_first=True
+        )
+        layers.extend([
+            TransformerEncoder(encoder_layer, self.num_blocks),
+            Pooling(self.pooling_type)
+        ])
+
+        # Feedforward output layers
+        in_size = self.emb_dim
+        for unit in self.units:
+            layers.append(nn.Linear(in_size, unit))
+            layers.append(self.activations_factory.create(self.activation))
             in_size = unit
 
         return nn.Sequential(*layers)
 
     def build(self, name, **kwargs):
-        net = A2CBuilder.Network(self.params, **kwargs)
+        net = OCTBuilder.Network(self.params, **kwargs)
         return net
+
+
+class Pooling(nn.Module):
+
+    def __init__(self, type, **kwargs):
+        super(Pooling, self).__init__()
+        self.type = type
+
+    def forward(self, x):
+        if self.type == 'max':
+            return torch.max(x, dim=0)[0]
+        elif self.type == 'avg':
+            return torch.mean(x, dim=0)
