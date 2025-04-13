@@ -23,6 +23,7 @@ class Foosball(Robot):
     ) -> None:
         """[summary]
         """
+        # TODO: Add scaling for table
 
         self._usd_path = usd_path
         self._name = name
@@ -62,10 +63,15 @@ class Foosball(Robot):
         self.default_joint_pos = torch.zeros_like(self.qdlim)
 
         self.figure_positions = {
-            'Keeper': torch.tensor([0], device=device),
-            'Defense': torch.tensor([-0.1235, 0.1235], device=device),
-            'Mid': torch.tensor([-0.241, -0.1205, 0, 0.1205, 0.241], device=device),
-            'Offense': torch.tensor([-0.184, 0, 0.184], device=device)
+            "Keeper_W": torch.tensor([[0.522], [0]], device=device),
+            "Defense_W": torch.tensor([[0.37295, 0.37295], [-0.1235, 0.1235]], device=device),
+            "Mid_W": torch.tensor([[0.07469, 0.07469, 0.07469, 0.07469, 0.07469], [-0.241, -0.1205, 0, 0.1205, 0.241]], device=device),
+            "Offense_W": torch.tensor([[-0.22372, -0.22372, -0.22372], [-0.184, 0, 0.184]], device=device),
+            #
+            "Keeper_B": torch.tensor([[-0.522], [0]], device=device),
+            "Defense_B": torch.tensor([[-0.37295, -0.37295], [-0.1235, 0.1235]], device=device),
+            "Mid_B": torch.tensor([[-0.07469, -0.07469, -0.07469, -0.07469, -0.07469], [-0.241, -0.1205, 0, 0.1205, 0.241]], device=device),
+            "Offense_B": torch.tensor([[0.22372, 0.22372, 0.22372], [-0.184, 0, 0.184]], device=device)
         }
 
         self.dof_paths = [

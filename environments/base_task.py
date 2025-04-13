@@ -10,9 +10,6 @@ import torch
 import os
 
 
-# TODO: Set up general step_trajectory functions
-
-
 class BaseTask(RLTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
@@ -40,6 +37,15 @@ class BaseTask(RLTask):
 
         self.anchored = False
 
+        self.object_centric_obs = self._env_cfg['object_centric_obs']
+        if self.object_centric_obs:
+            obs_features = self._num_obj_types + self._num_obj_features
+            self._num_observations = self._num_objects * obs_features
+            self.observation_space = spaces.Box(
+                np.ones((self._num_objects, obs_features), dtype=np.float32) * -1,
+                np.ones((self._num_objects, obs_features), dtype=np.float32) * 1,
+            )
+
         RLTask.__init__(self, name, env, offset)
 
         # For more flexibility when implementing hierarchical models etc.
@@ -52,11 +58,6 @@ class BaseTask(RLTask):
             self.task_observation_space = spaces.Box(
                 np.ones(self._num_task_observations, dtype=np.float32) * -np.Inf,
                 np.ones(self._num_task_observations, dtype=np.float32) * np.Inf,
-            )
-        if not hasattr(self, "oc_observation_space"):
-            self.task_observation_space = spaces.Box(
-                np.ones((self._num_objects, self._num_object_types + self._num_obs_per_object), dtype=np.float32) * -np.Inf,
-                np.ones((self._num_objects, self._num_object_types + self._num_obs_per_object), dtype=np.float32) * np.Inf,
             )
 
         # Reset parameters
@@ -81,12 +82,11 @@ class BaseTask(RLTask):
 
     def cleanup(self) -> None:
         RLTask.cleanup(self)
-
-        # last dim combines object obs + one hot encoding of type
-        self.oc_obs_buf = self.obs_buf = torch.zeros(
-            (self._num_envs, self._num_objects, self._num_object_types + self._num_obs_per_object),
-            device=self._device, dtype=torch.float
-        )
+        if self.object_centric_obs:
+            self.obs_buf = torch.zeros(
+                (self._num_envs, self._num_objects, self._num_obj_types + self._num_obj_features),
+                device=self._device, dtype=torch.float
+            )
 
     def set_up_scene(self, scene, **kwargs) -> None:
         RLTask.set_up_scene(self, scene, **kwargs)

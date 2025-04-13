@@ -8,8 +8,10 @@ import torch
 
 class OCTBuilder(NetworkBuilder):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        return
+        NetworkBuilder.__init__(self, **kwargs)
+
+    def load(self, params):
+        self.params = params
 
     class Network(NetworkBuilder.BaseNetwork):
         def __init__(self, params, **kwargs):
@@ -20,9 +22,10 @@ class OCTBuilder(NetworkBuilder):
             NetworkBuilder.BaseNetwork.__init__(self)
             self.load(params)
 
-            self.actor_mlp = self._build_transformer(input_shape)
+            in_size = input_shape[-1]
+            self.actor_mlp = self._build_transformer(in_size)
             if self.separate:
-                self.critic_mlp = self._build_transformer(input_shape)
+                self.critic_mlp = self._build_transformer(in_size)
 
             mlp_init = self.init_factory.create(**self.initializer)
             for m in self.modules():
@@ -129,35 +132,35 @@ class OCTBuilder(NetworkBuilder):
             self.has_rnn = False
             self.has_cnn = False
 
-    def _build_transformer(self, input_shape):
-        print('build transformer:', input_shape)
-        layers = []
+        def _build_transformer(self, input_shape):
+            print('build transformer:', input_shape)
+            layers = []
 
-        # Initial
-        layers.append(nn.Linear(input_shape, self.emb_dim))
+            # Initial
+            layers.append(nn.Linear(input_shape, self.emb_dim))
 
-        # Transformer
-        encoder_layer = TransformerEncoderLayer(
-            d_model=self.emb_dim,
-            nhead=self.num_heads,
-            dim_feedforward=self.emb_dim,
-            activation=self.transformer_activation,
-            dropout=self.dropout_prob,
-            batch_first=True
-        )
-        layers.extend([
-            TransformerEncoder(encoder_layer, self.num_blocks),
-            Pooling(self.pooling_type)
-        ])
+            # Transformer
+            encoder_layer = TransformerEncoderLayer(
+                d_model=self.emb_dim,
+                nhead=self.num_heads,
+                dim_feedforward=self.emb_dim,
+                activation=self.transformer_activation,
+                dropout=self.dropout_prob,
+                batch_first=True
+            )
+            layers.extend([
+                TransformerEncoder(encoder_layer, self.num_blocks),
+                Pooling(self.pooling_type)
+            ])
 
-        # Feedforward output layers
-        in_size = self.emb_dim
-        for unit in self.units:
-            layers.append(nn.Linear(in_size, unit))
-            layers.append(self.activations_factory.create(self.activation))
-            in_size = unit
+            # Feedforward output layers
+            in_size = self.emb_dim
+            for unit in self.units:
+                layers.append(nn.Linear(in_size, unit))
+                layers.append(self.activations_factory.create(self.activation))
+                in_size = unit
 
-        return nn.Sequential(*layers)
+            return nn.Sequential(*layers)
 
     def build(self, name, **kwargs):
         net = OCTBuilder.Network(self.params, **kwargs)
@@ -172,6 +175,6 @@ class Pooling(nn.Module):
 
     def forward(self, x):
         if self.type == 'max':
-            return torch.max(x, dim=0)[0]
+            return torch.max(x, dim=1)[0]
         elif self.type == 'avg':
-            return torch.mean(x, dim=0)
+            return torch.mean(x, dim=1)

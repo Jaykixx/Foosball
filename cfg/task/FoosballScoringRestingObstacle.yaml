@@ -23,6 +23,7 @@ env:
   winReward: 0
   lossPenalty: 1000
 
+  object_centric_obs: True
   applyKalmanFiltering: False
   applyKinematicConstraints: False  # Applies a jerk limited scurve planner as low level controller
                                    # Will be overridden if a DMP-based policy is used

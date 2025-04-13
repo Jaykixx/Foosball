@@ -40,8 +40,7 @@ class FoosballTask(BaseTask):
             # White, Black & Ball
             self._num_obj_types = 3
         if not hasattr(self, "_num_obs_per_object"):
-            # Joints/Figurines: Pos, Rot + corresponding velocities
-            # Ball: X, Y Pos + corresponding velocities
+            # X, Y Pos+Vel, Y Rot+Rotvel
             self._num_obj_features = 6
 
         super(FoosballTask, self).__init__(name, sim_config, env, offset)
@@ -177,18 +176,7 @@ class FoosballTask(BaseTask):
         init_ball_vel[..., 2:] = 0
         self._balls.set_velocities(init_ball_vel, indices=indices)
 
-    def get_observations(self) -> dict:
-        # Observe Joints
-        dof_pos = self._robots.get_joint_positions(joint_indices=self.active_joint_dofs, clone=False)
-        dof_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
-
-        # Observe Figurines
-        tpos = dof_pos.view(self.num_envs, 2, -1)[:, 0]
-        rpos = dof_pos.view(self.num_envs, 2, -1)[:, 1]
-
-        tvel = dof_vel.view(self.num_envs, 2, -1)[:, 0]
-        rvel = dof_vel.view(self.num_envs, 2, -1)[:, 1]
-
+    def get_ball_observation(self):
         # Observe game ball in x-, y-axis
         ball_obs = self._balls.get_world_poses(clone=False)[0]
         ball_obs = ball_obs[:, :2] - self._env_pos[:, :2]
@@ -202,6 +190,15 @@ class FoosballTask(BaseTask):
             ball_vel = self._balls.get_velocities(clone=False)[:, :2]
             ball_pos = ball_obs
 
+        return ball_pos, ball_vel
+
+    def get_joint_based_observations(self):
+        # Observe Joints
+        dof_pos = self._robots.get_joint_positions(joint_indices=self.active_joint_dofs, clone=False)
+        dof_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
+
+        ball_pos, ball_vel = self.get_ball_observation()
+
         if len(self.passive_joint_dofs):
             passive_fig_pos = self._robots.get_joint_positions(joint_indices=self.passive_joint_dofs, clone=False)
             self.obs_buf = torch.cat(
@@ -212,10 +209,52 @@ class FoosballTask(BaseTask):
                 (dof_pos, dof_vel, ball_pos, ball_vel), dim=-1
             )
 
+    def get_obj_centric_observations(self):
+        # TODO: Rescale to table size
+        obj_obs = []
+        for name, value in self.active_rods.items():
+            fig_tpos = self.robot.figure_positions[name][None].repeat_interleave(self.num_envs, 0)
+            fig_tpos[:, 1] += self._robots.get_joint_positions(joint_indices=[value['pris_id']], clone=False)
+
+            dof_rpos = self._robots.get_joint_positions(joint_indices=[value['rev_id']], clone=False)
+            fig_rpos = dof_rpos[..., None].repeat_interleave(fig_tpos.shape[-1], -1)
+
+            fig_tvel = torch.zeros_like(fig_tpos)
+            fig_tvel[:, 1] = self._robots.get_joint_velocities(joint_indices=[value['pris_id']], clone=False)
+
+            dof_rvel = self._robots.get_joint_velocities(joint_indices=[value['rev_id']], clone=False)
+            fig_rvel = dof_rvel[..., None].repeat_interleave(fig_tvel.shape[-1], -1)
+
+            one_hot_encoding = torch.zeros((self.num_envs, self._num_obj_types, fig_tpos.shape[-1]), device=self.device)
+            if 'W' in name:
+                one_hot_encoding[:, 0] = 1
+            elif 'B' in name:
+                one_hot_encoding[:, 1] = 1
+
+            fig_obs = torch.cat((
+                one_hot_encoding, fig_tpos, fig_rpos, fig_tvel, fig_rvel,
+            ), dim=1).transpose(1, 2)
+
+            obj_obs.append(fig_obs)
+
+        ball_obs = torch.zeros((self.num_envs, self._num_obj_features + self._num_obj_types), device=self.device)
+        ball_pos, ball_vel = self.get_ball_observation()
+        ball_obs[..., self._num_obj_types-1] = 1
+        ball_obs[..., self._num_obj_types:self._num_obj_types+2] = ball_pos
+        ball_obs[..., -3:-1] = ball_vel
+        obj_obs.append(ball_obs[:, None])
+
+        self.obs_buf = torch.cat(obj_obs, dim=1)
+
+    def get_observations(self) -> dict:
+        if self.object_centric_obs:
+            self.get_obj_centric_observations()
+        else:
+            self.get_joint_based_observations()
+
         observations = {
             self._robots.name: {
                 "obs_buf": self.obs_buf,
-                "oc_obs_buf": self.oc_obs_buf
             }
         }
 
@@ -225,7 +264,7 @@ class FoosballTask(BaseTask):
 
     def hide_inactive_rods(self):
         flags = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
-        for rod_name in self.inactive_rods:
+        for rod_name in self.inactive_rods.keys():
             if rod_name[-1] == 'W':
                 rod_prim = XFormPrimView(
                     prim_paths_expr="/World/envs/env_.*/Foosball/White/" + rod_name,
@@ -251,19 +290,30 @@ class FoosballTask(BaseTask):
         self.observed_dofs += self.active_joint_dofs
 
         rev_joints = {name: self._robots.get_dof_index(name) for name in self.rev_joints}
+        pris_joints = {name: self._robots.get_dof_index(name) for name in self.pris_joints}
+        self.active_rev_joints = {key: value for key, value in rev_joints.items() if value in self.active_joint_dofs}
+        self.active_pris_joints = {key: value for key, value in pris_joints.items() if value in self.active_joint_dofs}
+
+        self.active_rods = {}
         self.inactive_rods = {}
-        for joint_name, joint_id in rev_joints.items():
-            if joint_id not in self.observed_dofs:
-                rod_name = '_'.join(joint_name.split('_')[:2])
-                partner_joint = rod_name + "_PrismaticJoint"
-                partner_joint_id = self._robots.get_dof_index(partner_joint)
-                if partner_joint_id not in self.observed_dofs:
-                    self.inactive_rods[rod_name] = joint_id
+        for key, value in pris_joints.items():
+            pris_id = value
+
+            # Get partner joint
+            rod_name = '_'.join(key.split('_')[:2])
+            rev_id = self._robots.get_dof_index(rod_name + "_RevoluteJoint")
+            if (
+                pris_id in self.active_joint_dofs or pris_id in self.passive_joint_dofs or
+                rev_id in self.active_joint_dofs or rev_id in self.passive_joint_dofs
+            ):
+                self.active_rods[rod_name] = {
+                    'pris_id': pris_id,
+                    'rev_id': rev_id,
+                }
+            else:
+                self.inactive_rods[rod_name] = rev_id  # For moving rods out of the way
 
         self.hide_inactive_rods()
-
-        pris_joints = {name: self._robots.get_dof_index(name) for name in self.pris_joints}
-        self.active_pris_joints = {key: value for key, value in pris_joints.items() if value in self.active_joint_dofs}
 
         self._default_joint_pos[:, list(self.inactive_rods.values())] += np.pi/2
 
