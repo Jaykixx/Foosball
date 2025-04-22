@@ -210,19 +210,21 @@ class FoosballTask(BaseTask):
             )
 
     def get_obj_centric_observations(self):
-        # TODO: Rescale to table size
         obj_obs = []
         for name, value in self.active_rods.items():
-            fig_tpos = self.robot.figure_positions[name][None].repeat_interleave(self.num_envs, 0)
-            fig_tpos[:, 1] += self._robots.get_joint_positions(joint_indices=[value['pris_id']], clone=False)
+            # TODO: Rescale to table size
+            sign = 1 if 'W' in name else -1  # Joints for black are mirrored so signs are needed
 
-            dof_rpos = self._robots.get_joint_positions(joint_indices=[value['rev_id']], clone=False)
+            fig_tpos = self.robot.figure_positions[name][None].repeat_interleave(self.num_envs, 0)
+            fig_tpos[:, 1] += sign * self._robots.get_joint_positions(joint_indices=[value['pris_id']], clone=False)
+
+            dof_rpos = sign * self._robots.get_joint_positions(joint_indices=[value['rev_id']], clone=False)
             fig_rpos = dof_rpos[..., None].repeat_interleave(fig_tpos.shape[-1], -1)
 
             fig_tvel = torch.zeros_like(fig_tpos)
-            fig_tvel[:, 1] = self._robots.get_joint_velocities(joint_indices=[value['pris_id']], clone=False)
+            fig_tvel[:, 1] = sign * self._robots.get_joint_velocities(joint_indices=[value['pris_id']], clone=False)
 
-            dof_rvel = self._robots.get_joint_velocities(joint_indices=[value['rev_id']], clone=False)
+            dof_rvel = sign * self._robots.get_joint_velocities(joint_indices=[value['rev_id']], clone=False)
             fig_rvel = dof_rvel[..., None].repeat_interleave(fig_tvel.shape[-1], -1)
 
             one_hot_encoding = torch.zeros((self.num_envs, self._num_obj_types, fig_tpos.shape[-1]), device=self.device)
@@ -315,6 +317,8 @@ class FoosballTask(BaseTask):
 
         self.hide_inactive_rods()
 
+        # Move all hidden rods into horizontal position
+        #   inactive_rods only contains revolute joint ids
         self._default_joint_pos[:, list(self.inactive_rods.values())] += np.pi/2
 
         if self._applyKinematicConstraints:

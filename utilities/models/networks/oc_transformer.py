@@ -89,7 +89,6 @@ class OCTBuilder(NetworkBuilder):
                     sigma = self.sigma_act(self.sigma(a_out))
                 return mu, sigma, value, states
 
-
         def is_separate_critic(self):
             return self.separate
 

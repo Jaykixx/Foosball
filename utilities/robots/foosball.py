@@ -47,7 +47,6 @@ class Foosball(Robot):
             articulation_controller=None,
         )
 
-
         self.qlim = torch.tensor([
             [-0.123, -0.179, -0.0615, -0.1185] * 2 + [-2*np.pi] * 8,
             [ 0.123,  0.179,  0.0615,  0.1185] * 2 + [ 2*np.pi] * 8
@@ -62,6 +61,7 @@ class Foosball(Robot):
 
         self.default_joint_pos = torch.zeros_like(self.qdlim)
 
+        # TODO: Calc in relation to table size and rescale if necessary
         self.figure_positions = {
             "Keeper_W": torch.tensor([[0.522], [0]], device=device),
             "Defense_W": torch.tensor([[0.37295, 0.37295], [-0.1235, 0.1235]], device=device),
@@ -135,4 +135,18 @@ class Foosball(Robot):
             "Defense_B_PrismaticJoint",
             "Mid_B_PrismaticJoint",
             "Offense_B_PrismaticJoint"
+        ]
+
+        self.rod_paths_W = [
+            "White/Keeper_W",
+            "White/Defense_W",
+            "White/Mid_W",
+            "White/Offense_W"
+        ]
+
+        self.rod_paths_B = [
+            "Black/Keeper_B",
+            "Black/Defense_B",
+            "Black/Mid_B",
+            "Black/Offense_B"
         ]
