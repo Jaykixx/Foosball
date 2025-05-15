@@ -141,7 +141,7 @@ class A2CPlayer(BasePlayer):
         return obs, task_rewards, dones, infos
 
     def restore(self, fn):
-        checkpoint = torch_ext.load_checkpoint(fn)
+        checkpoint = torch.load(fn, weights_only=False)  # torch_ext.load_checkpoint(fn)
         self.model.load_state_dict(checkpoint['model'])
         if self.normalize_input and 'running_mean_std' in checkpoint:
             self.model.running_mean_std.load_state_dict(checkpoint['running_mean_std'])

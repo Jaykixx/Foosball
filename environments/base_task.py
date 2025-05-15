@@ -41,14 +41,14 @@ class BaseTask(RLTask):
         if self.object_centric_obs:
             obs_features = self._num_obj_types + self._num_obj_features
             self._num_observations = self._num_objects * obs_features
-            self.observation_space = spaces.Box(
-                np.ones((self._num_objects*obs_features,), dtype=np.float32) * -np.Inf,
-                np.ones((self._num_objects*obs_features,), dtype=np.float32) * np.Inf,
-            )
             # self.observation_space = spaces.Box(
-            #     np.ones((self._num_objects, obs_features), dtype=np.float32) * -np.Inf,
-            #     np.ones((self._num_objects, obs_features), dtype=np.float32) * np.Inf,
+            #     np.ones((self._num_objects*obs_features,), dtype=np.float32) * -np.Inf,
+            #     np.ones((self._num_objects*obs_features,), dtype=np.float32) * np.Inf,
             # )
+            self.observation_space = spaces.Box(
+                np.ones((self._num_objects, obs_features), dtype=np.float32) * -np.Inf,
+                np.ones((self._num_objects, obs_features), dtype=np.float32) * np.Inf,
+            )
 
         RLTask.__init__(self, name, env, offset)
 

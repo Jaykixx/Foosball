@@ -1,12 +1,8 @@
+import isaacsim
 from omniisaacgymenvs.utils.hydra_cfg.hydra_utils import *
 from omniisaacgymenvs.utils.hydra_cfg.reformat import omegaconf_to_dict, print_dict
 from omniisaacgymenvs.utils.rlgames.rlgames_utils import RLGPUAlgoObserver, RLGPUEnv
 from omniisaacgymenvs.utils.config_utils.path_utils import retrieve_checkpoint_path, get_experience
-
-from utilities.environment.env_base import CustomVecEnvRLGames, SelfPlayRLGPUEnv
-from utilities.custom_runner import CustomRunner as Runner
-from rl_games.common import env_configurations, vecenv
-from utilities.task_util import initialize_task
 
 from omegaconf import DictConfig
 import datetime
@@ -25,6 +21,9 @@ class RLGTrainer:
         # which is passed to RL Games and called internally.
         # We use the helper function here to specify the environment config.
         self.cfg_dict["task"]["test"] = self.cfg.test
+
+        from utilities.environment.env_base import SelfPlayRLGPUEnv
+        from rl_games.common import env_configurations, vecenv
 
         # register the rl-games adapter to use inside the runner
         if "SelfPlay" in self.cfg_dict["task_name"]:
@@ -48,6 +47,7 @@ class RLGTrainer:
 
     def run(self):
         # create runner and set the settings
+        from utilities.custom_runner import CustomRunner as Runner
         runner = Runner(RLGPUAlgoObserver())
         runner.load(self.rlg_config_dict)
         runner.reset()
@@ -89,6 +89,7 @@ def parse_hydra_configs(cfg: DictConfig):
     # select kit app file
     experience = get_experience(headless, cfg.enable_livestream, enable_viewport, cfg.enable_recording, cfg.kit_app)
 
+    from utilities.environment.env_base import CustomVecEnvRLGames
     env = CustomVecEnvRLGames(
         headless=headless,
         sim_device=cfg.device_id,
@@ -112,6 +113,7 @@ def parse_hydra_configs(cfg: DictConfig):
     cfg.seed = set_seed(cfg.seed, torch_deterministic=cfg.torch_deterministic)
     cfg_dict['seed'] = cfg.seed
 
+    from utilities.task_util import initialize_task
     task = initialize_task(cfg_dict, env)
 
     rlg_trainer = RLGTrainer(cfg, cfg_dict)

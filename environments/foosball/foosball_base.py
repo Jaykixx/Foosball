@@ -409,6 +409,7 @@ class FoosballTask(BaseTask):
         # Check done flags
         goal_mask = torch.max(wins, losses)
         timeouts = self.progress_buf >= self._max_episode_length - 1
+        self.rew_buf[timeouts] = - self.termination_penalty
         self.reset_buf = torch.max(goal_mask, timeouts)
         self.reset_buf = torch.max(self.reset_buf, termination_mask)
 
