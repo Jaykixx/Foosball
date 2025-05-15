@@ -6,6 +6,7 @@ def initialize_task(config, env, init_sim=True):
     from environments.foosball.foosball_scoring_resting_obstacles import FoosballScoringRestingObstacleTask
     from environments.foosball.foosball_selfplay import FoosballSelfPlay
     from environments.foosball.foosball_keeper_selfplay import FoosballKeeperSelfPlay
+    from environments.foosball.foosball_mixed_selfplay import FoosballMixedSelfPlay
 
     # Mappings from strings to environments
     task_map = {
@@ -16,6 +17,7 @@ def initialize_task(config, env, init_sim=True):
         "FoosballScoringRestingObstacle": FoosballScoringRestingObstacleTask,
         "FoosballSelfPlay": FoosballSelfPlay,
         "FoosballKeeperSelfPlay": FoosballKeeperSelfPlay,
+        "FoosballMixedSelfPlay": FoosballMixedSelfPlay
     }
 
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig

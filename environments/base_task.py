@@ -42,9 +42,13 @@ class BaseTask(RLTask):
             obs_features = self._num_obj_types + self._num_obj_features
             self._num_observations = self._num_objects * obs_features
             self.observation_space = spaces.Box(
-                np.ones((self._num_objects, obs_features), dtype=np.float32) * -1,
-                np.ones((self._num_objects, obs_features), dtype=np.float32) * 1,
+                np.ones((self._num_objects*obs_features,), dtype=np.float32) * -np.Inf,
+                np.ones((self._num_objects*obs_features,), dtype=np.float32) * np.Inf,
             )
+            # self.observation_space = spaces.Box(
+            #     np.ones((self._num_objects, obs_features), dtype=np.float32) * -np.Inf,
+            #     np.ones((self._num_objects, obs_features), dtype=np.float32) * np.Inf,
+            # )
 
         RLTask.__init__(self, name, env, offset)
 
@@ -99,14 +103,14 @@ class BaseTask(RLTask):
     def reset_idx(self, env_ids):
         indices = env_ids.to(dtype=torch.int32)
 
-        default_joint_pos = self._default_joint_pos[:, self.active_joint_dofs].clone()
-        default_joint_vel = self._default_joint_vel[:, self.active_joint_dofs].clone()
+        default_joint_pos = self._default_joint_pos.clone()
+        default_joint_vel = self._default_joint_vel.clone()
 
         joint_offsets = torch.rand(
             (self.num_envs, len(self.active_joint_dofs)), device=self._device
         )
-        default_joint_pos = tensor_clamp(
-            default_joint_pos + self.joint_noise * 2 * (joint_offsets - 0.5),
+        default_joint_pos[:, self.active_joint_dofs] = tensor_clamp(
+            default_joint_pos[:, self.active_joint_dofs] + self.joint_noise * 2 * (joint_offsets - 0.5),
             self.joint_limits[:, self.active_joint_dofs, 0],
             self.joint_limits[:, self.active_joint_dofs, 1],
         )
@@ -115,10 +119,10 @@ class BaseTask(RLTask):
         if hasattr(self, '_robots_dof_targets'):
             self._robots_dof_targets[env_ids] = default_joint_pos[env_ids].clone()
         self._robots.set_joint_positions(
-            default_joint_pos[env_ids], indices=indices, joint_indices=self.active_joint_dofs
+            default_joint_pos[env_ids], indices=indices
         )
         self._robots.set_joint_velocities(
-            default_joint_vel[env_ids], indices=indices, joint_indices=self.active_joint_dofs
+            default_joint_vel[env_ids], indices=indices
         )
 
         if self.delay_actions:

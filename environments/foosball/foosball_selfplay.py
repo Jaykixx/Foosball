@@ -11,7 +11,7 @@ import time
 class FoosballSelfPlay(FoosballTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
-        self._num_agents = 2
+        # self._num_agents = 2
         if not hasattr(self, "_num_actions"):
             # Defines action space for AI
             self._num_actions = 8
@@ -46,10 +46,10 @@ class FoosballSelfPlay(FoosballTask):
         op_actions = tuple([
             torch.atleast_2d(
                 self.opponents[i].get_action(
-                    {"obs": self.inv_obs_buf[
+                    self.inv_obs_buf[
                         self.opponents_obs_ranges[i]:self.opponents_obs_ranges[i + 1],
                         ...
-                    ]}
+                    ]
                 ).detach()
             )
             for i in range(self.num_opponents)
@@ -140,12 +140,12 @@ class FoosballSelfPlay(FoosballTask):
         ball_pos = pos - self._env_pos
 
         # Optional Reward: Ball near opponent goal
-        self.rew_buf += self._dist_to_goal_reward(ball_pos)
+        self.rew_buf += 50 * self._dist_to_goal_reward(ball_pos)
 
         # Optional Reward: Regularization of actions
         # self.rew_buf += 0.1 * self._compute_action_regularization()
 
         # Optional Reward: Pull figures to ball
-        self.rew_buf += self._fig_to_ball_reward(ball_pos)
+        # self.rew_buf += self._fig_to_ball_reward(ball_pos)
 
         return wins, losses, timeouts

@@ -22,6 +22,8 @@ def get_extended_env_info(env):
         result_shapes['agents'] = env.get_number_of_agents()
     if hasattr(env, "value_size"):
         result_shapes['value_size'] = env.value_size
+    if hasattr(env, "num_object_types"):
+        result_shapes['num_object_types'] = env.num_object_types
     print(result_shapes)
     return result_shapes
 

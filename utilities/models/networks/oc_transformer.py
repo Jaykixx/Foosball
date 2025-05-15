@@ -1,6 +1,7 @@
 from rl_games.algos_torch.network_builder import NetworkBuilder, A2CBuilder
 
 from torch.nn import TransformerEncoderLayer, TransformerEncoder
+from typing import Optional, Mapping, Any
 import torch.nn as nn
 import numpy as np
 import torch
@@ -17,6 +18,7 @@ class OCTBuilder(NetworkBuilder):
         def __init__(self, params, **kwargs):
             actions_num = kwargs.pop('actions_num')
             input_shape = kwargs.pop('input_shape')
+            self.num_object_types = kwargs.pop('num_object_types')
             self.value_size = kwargs.pop('value_size', 1)
 
             NetworkBuilder.BaseNetwork.__init__(self)
@@ -63,16 +65,25 @@ class OCTBuilder(NetworkBuilder):
             if getattr(self.value, "bias", None) is not None:
                 torch.nn.init.zeros_(self.value.bias)
 
+        @property
+        def has_object_info(self):
+            return self.num_object_types is not None
+
         def forward(self, obs_dict):
             obs = obs_dict['obs']
             states = obs_dict.get('rnn_states', None)
 
+            if self.has_object_info:
+                active_obj_mask = obs[..., :self.num_object_types].sum(dim=-1).bool()
+            else:
+                active_obj_mask = torch.ones(*obs.shape[:-1], dtype=torch.bool, device=obs.device)
+
             if self.separate:
                 a_out = c_out = obs
-                a_out = self.actor_mlp(a_out)
-                c_out = self.critic_mlp(c_out)
+                a_out = self.actor_mlp(a_out, active_obj_mask=active_obj_mask)
+                c_out = self.critic_mlp(c_out, active_obj_mask=active_obj_mask)
             else:
-                a_out = self.actor_mlp(obs)
+                a_out = self.actor_mlp(obs, active_obj_mask=active_obj_mask)
                 c_out = a_out
 
             value = self.value_act(self.value(c_out))
@@ -119,13 +130,7 @@ class OCTBuilder(NetworkBuilder):
                 self.is_continuous = False
                 self.is_multi_discrete = False
 
-            # Transformer settings
-            self.emb_dim = params['transformer']['emb_dim']
-            self.num_heads = params['transformer']['num_heads']
-            self.num_blocks = params['transformer']['num_blocks']
-            self.dropout_prob = params['transformer']['dropout_prob']
-            self.transformer_activation = params['transformer']['activation']
-            self.pooling_type = params['transformer']['pooling_type']
+            self.transformer_params = params['transformer']
 
             self.central_value = False
             self.has_rnn = False
@@ -133,37 +138,81 @@ class OCTBuilder(NetworkBuilder):
 
         def _build_transformer(self, input_shape):
             print('build transformer:', input_shape)
-            layers = []
-
-            # Initial
-            layers.append(nn.Linear(input_shape, self.emb_dim))
-
-            # Transformer
-            encoder_layer = TransformerEncoderLayer(
-                d_model=self.emb_dim,
-                nhead=self.num_heads,
-                dim_feedforward=self.emb_dim,
-                activation=self.transformer_activation,
-                dropout=self.dropout_prob,
-                batch_first=True
-            )
-            layers.extend([
-                TransformerEncoder(encoder_layer, self.num_blocks),
-                Pooling(self.pooling_type)
-            ])
-
-            # Feedforward output layers
-            in_size = self.emb_dim
-            for unit in self.units:
-                layers.append(nn.Linear(in_size, unit))
-                layers.append(self.activations_factory.create(self.activation))
-                in_size = unit
-
-            return nn.Sequential(*layers)
+            params = {
+                'units': self.units,
+                'activation': self.activation,
+                'transformer': self.transformer_params,
+                'activations_factory': self.activations_factory,
+            }
+            transformer = Transformer(params)
+            transformer.build(input_shape)
+            return transformer
 
     def build(self, name, **kwargs):
         net = OCTBuilder.Network(self.params, **kwargs)
         return net
+
+
+class Transformer(nn.Module):
+
+    def __init__(self, params, **kwargs):
+        super(Transformer, self).__init__()
+        self.activation = params['activation']
+        self.units = params['units']
+        self.activations_factory = params['activations_factory']
+
+        self.emb_dim = params['transformer']['emb_dim']
+        self.num_heads = params['transformer']['num_heads']
+        self.num_blocks = params['transformer']['num_blocks']
+        self.transformer_activation = params['transformer']['activation']
+        self.dropout_prob = params['transformer']['dropout_prob']
+        self.pooling_type = params['transformer']['pooling_type']
+
+    def build(self, input_shape):
+        self.init_layer = nn.Linear(input_shape, self.emb_dim)
+
+        # Transformer
+        encoder_layer = TransformerEncoderLayer(
+            d_model=self.emb_dim,
+            nhead=self.num_heads,
+            dim_feedforward=self.emb_dim,
+            activation=self.transformer_activation,
+            dropout=self.dropout_prob,
+            batch_first=True
+        )
+        self.transformer_layer = TransformerEncoder(encoder_layer, self.num_blocks)
+
+        self.pooling = Pooling(self.pooling_type)
+
+        # Feedforward output layers
+        layers = []
+        in_size = self.emb_dim
+        for unit in self.units:
+            layers.append(nn.Linear(in_size, unit))
+            layers.append(self.activations_factory.create(self.activation))
+            in_size = unit
+        self.out_mlp = nn.Sequential(*layers)
+
+    def forward(self, obs, active_obj_mask: Optional[torch.Tensor] = None):
+        # print_obs = obs.clone().cpu()
+        # src_key_padding_mask = ~active_obj_mask.clone().cpu()
+        # out = self.init_layer(obs)
+        # vor_Transformer = out.clone().detach().cpu()
+        # out = self.transformer_layer(out, src_key_padding_mask=~active_obj_mask)
+        # nach_Transformer = out.clone().detach().cpu()
+        # out = self.pooling(out, active_obj_mask=active_obj_mask)
+        # nach_Pooling_AVG = out.clone().detach().cpu()  # TODO: Rename for max
+        # out = self.out_mlp(out)
+        # nach_FeedForward = out.clone().detach().cpu()
+
+        out = self.init_layer(obs)
+        if active_obj_mask is not None:
+            out = self.transformer_layer(out, src_key_padding_mask=~active_obj_mask)
+            out = self.pooling(out, active_obj_mask=active_obj_mask)
+        else:
+            out = self.transformer_layer(out)
+            out = self.pooling(out)
+        return self.out_mlp(out)
 
 
 class Pooling(nn.Module):
@@ -172,8 +221,13 @@ class Pooling(nn.Module):
         super(Pooling, self).__init__()
         self.type = type
 
-    def forward(self, x):
+    def forward(self, x, active_obj_mask: Optional[torch.Tensor] = None):
         if self.type == 'max':
-            return torch.max(x, dim=1)[0]
+            out = x * active_obj_mask.unsqueeze(-1) if active_obj_mask is not None else x
+            return torch.max(out, dim=1)[0]
         elif self.type == 'avg':
-            return torch.mean(x, dim=1)
+            if active_obj_mask is not None:
+                num_active_objs = active_obj_mask.sum(dim=-1, keepdim=True)
+                return torch.sum(x, dim=1) / num_active_objs
+            else:
+                return torch.mean(x, dim=1)

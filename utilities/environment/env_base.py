@@ -28,7 +28,7 @@ class CustomVecEnvRLGames(VecEnvRLGames):
         super().set_task(**kwargs)
         # Override phys_dt in task since world rounds to full Hz Frequency
         self._task.phys_dt = self._world.get_physics_dt()
-        if self._task.num_agents > 1:
+        if hasattr(self.task, "num_opponents"):
             self.full_actions = lambda action: self._task.full_actions(action)
 
         if hasattr(self.task, "has_gripper"):
@@ -39,6 +39,8 @@ class CustomVecEnvRLGames(VecEnvRLGames):
             self.task_observation_space = self.task.task_observation_space
         if hasattr(self.task, "joint_space"):
             self.joint_space = self.task.joint_space
+        if hasattr(self.task, "_num_obj_types"):
+            self.num_object_types = self.task._num_obj_types
 
     @property
     def task(self):

@@ -5,7 +5,7 @@ from utilities.functions.rw_csv_files import read_csv
 from utilities.models.networks import DiscEncNetwork
 from utilities.models.players import LowLevelPlayer, ase_player
 from utilities.models.agents import A2CAgent
-from utilities.functions.latent_sampling import *
+from utilities.functions.sampling import *
 from utilities.buffers import ReplayBuffer
 
 from abc import abstractmethod

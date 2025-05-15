@@ -34,7 +34,7 @@ class FoosballScoringTask(FoosballTask):
         # self.rew_buf += self._dist_to_goal_reward(ball_pos)
 
         # Optional Reward: Regularization of actions
-        self.rew_buf += 0.5 * self._compute_action_regularization()
+        # self.rew_buf += 0.5 * self._compute_action_regularization()
 
         # # Optional Reward: Pull figures to ball
         # self.rew_buf += self._fig_to_ball_reward(ball_pos)

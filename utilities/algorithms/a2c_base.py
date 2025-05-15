@@ -244,6 +244,7 @@ class ContinuousA2CBase(CustomA2CBase):
         build_config = {
             'actions_num': policy_out_num,
             'input_shape': policy_input_shape,
+            'num_object_types': self.env_info.get('num_object_types', None),
             'num_seqs': self.num_actors * self.num_agents,
             'value_size': self.env_info.get('value_size', 1),
             'normalize_value': self.normalize_value,

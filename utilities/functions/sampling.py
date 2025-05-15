@@ -2,6 +2,16 @@ import numpy as np
 import torch
 
 
+def randint(low, high=None, size=None):
+    """ Credit: https://github.com/pytorch/pytorch/issues/89438#issuecomment-1862363360"""
+    if high is None:
+        high = low
+        low = 0
+    if size is None:
+        size = low.shape if isinstance(low, torch.Tensor) else high.shape
+    return torch.randint(2**63 - 1, size=size, device=high.device) % (high - low) + low
+
+
 def sample_latents(horizon, num_envs, dimension, steps_min, steps_max, device):
     zbar = torch.zeros((horizon, num_envs, dimension), device=device)
     i = 0

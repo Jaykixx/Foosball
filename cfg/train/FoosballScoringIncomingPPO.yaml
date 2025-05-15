@@ -9,25 +9,25 @@ params:
     name: continuous_a2c_logstd  # ndp
 
   network:
-    name: oc_transformer
+    name: oc_transformer  # actor_critic
     separate: False
     space:
       continuous:
         mu_activation: None
         sigma_activation: None
         mu_init:
-          name: orthogonal_initializer
-          gain: 0.01
+          name: default
+          # gain: 0.01
         value_init:
-          name: orthogonal_initializer
-          gain: 1
+          name: default
+          # gain: 1
         sigma_init:
           name: const_initializer
           val: 0
         fixed_sigma: True
     mlp:
-      units: [ 128, 128 ]
-      activation: relu
+      units: [128, 128]
+      activation: tanh
       d2rl: False  # Ignored by oc_transformer network
       initializer:
         name: default
@@ -40,7 +40,7 @@ params:
       num_blocks: 3
       activation: relu
       dropout_prob: 0.1
-      pooling_type: 'avg'  # 'max'
+      pooling_type: 'avg'  # 'max' or 'avg'
 
   dmp:  # If active applies dmp in between policy and env
     active: False
@@ -70,7 +70,7 @@ params:
     multi_gpu: False
     ppo: True
     mixed_precision: False
-    normalize_input: True
+    normalize_input: False
     normalize_value: True
     clip_actions: True
     num_actors: ${....task.env.numEnvs}
@@ -79,16 +79,16 @@ params:
     normalize_advantage: True
     gamma: 0.99
     tau: 0.95
-    learning_rate: 1e-3
+    learning_rate: 5e-5
     lr_schedule: adaptive
     schedule_type: legacy
     kl_threshold: 0.008
     score_to_win: 100000000
-    max_epochs: ${resolve_default:10000,${....max_iterations}}
+    max_epochs: ${resolve_default:1000,${....max_iterations}}
     save_best_after: 100
     save_frequency: 200
     grad_norm: 1.0
-    entropy_coef: 0.0
+    entropy_coef: 0.001
     truncate_grads: True
     e_clip: 0.2
     horizon_length: 16

@@ -36,7 +36,7 @@ class FoosballTask(BaseTask):
         if not hasattr(self, "_num_objects"):
             # Number of involved figurines + ball
             self._num_objects = 23
-        if not hasattr(self, "_num_object_types"):
+        if not hasattr(self, "_num_obj_types"):
             # White, Black & Ball
             self._num_obj_types = 3
         if not hasattr(self, "_num_obs_per_object"):
@@ -213,7 +213,7 @@ class FoosballTask(BaseTask):
         obj_obs = []
         for name, value in self.active_rods.items():
             # TODO: Rescale to table size
-            sign = 1 if 'W' in name else -1  # Joints for black are mirrored so signs are needed
+            sign = -1 if 'W' in name else 1  # Joints for black are mirrored so signs are needed
 
             fig_tpos = self.robot.figure_positions[name][None].repeat_interleave(self.num_envs, 0)
             fig_tpos[:, 1] += sign * self._robots.get_joint_positions(joint_indices=[value['pris_id']], clone=False)
@@ -246,7 +246,14 @@ class FoosballTask(BaseTask):
         ball_obs[..., -3:-1] = ball_vel
         obj_obs.append(ball_obs[:, None])
 
-        self.obs_buf = torch.cat(obj_obs, dim=1)
+        obs = torch.cat(obj_obs, dim=1)
+
+        # Center obs around ball
+        obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
+        # velocities toward ball should be positive and vice versa
+        obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
+
+        self.obs_buf = obs  # .flatten(start_dim=1)
 
     def get_observations(self) -> dict:
         if self.object_centric_obs:

@@ -5,7 +5,7 @@ from rl_games.common import vecenv
 from utilities.environment.env_configurations import get_extended_env_info
 from utilities.models.networks import DiscEncNetwork
 from utilities.models.players import A2CPlayer
-from utilities.functions.latent_sampling import *
+from utilities.functions.sampling import *
 
 from gym import spaces
 import numpy as np
