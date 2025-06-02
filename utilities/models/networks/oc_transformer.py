@@ -36,7 +36,7 @@ class OCTBuilder(NetworkBuilder):
                     if getattr(m, "bias", None) is not None:
                         torch.nn.init.zeros_(m.bias)
 
-            out_size = self.units[-1]
+            out_size = self.actor_mlp.out_size
             self.mu = torch.nn.Linear(out_size, actions_num)
             self.mu_act = self.activations_factory.create(self.space_config['mu_activation'])
             mu_init = self.init_factory.create(**self.space_config['mu_init'])
@@ -95,7 +95,7 @@ class OCTBuilder(NetworkBuilder):
                 raise NotImplementedError  # TODO: Fix
             if self.is_continuous:
                 if self.fixed_sigma:
-                    sigma = mu * 0.0 + self.sigma_act(self.sigma)
+                    sigma = self.sigma_act(self.sigma)
                 else:
                     sigma = self.sigma_act(self.sigma(a_out))
                 return mu, sigma, value, states
@@ -168,6 +168,8 @@ class Transformer(nn.Module):
         self.dropout_prob = params['transformer']['dropout_prob']
         self.pooling_type = params['transformer']['pooling_type']
 
+        self.out_size = self.units[-1] if len(self.units) > 0 else self.emb_dim
+
     def build(self, input_shape):
         self.init_layer = nn.Linear(input_shape, self.emb_dim)
 
@@ -191,7 +193,8 @@ class Transformer(nn.Module):
             layers.append(nn.Linear(in_size, unit))
             layers.append(self.activations_factory.create(self.activation))
             in_size = unit
-        self.out_mlp = nn.Sequential(*layers)
+
+        self.out_mlp = nn.Sequential(*layers) if len(layers) > 0 else None
 
     def forward(self, obs, active_obj_mask: Optional[torch.Tensor] = None):
         # print_obs = obs.clone().cpu()
@@ -212,7 +215,7 @@ class Transformer(nn.Module):
         else:
             out = self.transformer_layer(out)
             out = self.pooling(out)
-        return self.out_mlp(out)
+        return self.out_mlp(out) if self.out_mlp is not None else out
 
 
 class Pooling(nn.Module):

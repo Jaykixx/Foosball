@@ -9,7 +9,7 @@ params:
     name: continuous_a2c_logstd  # ndp
 
   network:
-    name: oc_transformer  # actor_critic
+    name: actor_critic  # oc_transformer  # actor_critic
     separate: False
     space:
       continuous:
@@ -26,7 +26,7 @@ params:
           val: 0
         fixed_sigma: True
     mlp:
-      units: [128, 128]
+      units: [256, 256, 128]
       activation: tanh
       d2rl: False  # Ignored by oc_transformer network
       initializer:
@@ -39,8 +39,8 @@ params:
       num_heads: 8
       num_blocks: 3
       activation: relu
-      dropout_prob: 0.1
-      pooling_type: 'avg'  # 'max' or 'avg'
+      dropout_prob: 0.0
+      pooling_type: 'max'  # 'max' or 'avg'
 
   dmp:  # If active applies dmp in between policy and env
     active: False

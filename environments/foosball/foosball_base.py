@@ -251,9 +251,13 @@ class FoosballTask(BaseTask):
         # Center obs around ball
         obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
         # velocities toward ball should be positive and vice versa
+        obs[:, :-1, self._num_obj_types:self._num_obj_types + 2] -= ball_vel[:, None]
         obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
 
-        self.obs_buf = obs  # .flatten(start_dim=1)
+        if self.flatten_obs:
+            obs = obs.flatten(start_dim=1)
+
+        self.obs_buf = obs
 
     def get_observations(self) -> dict:
         if self.object_centric_obs:
@@ -355,6 +359,13 @@ class FoosballTask(BaseTask):
         y_dist = torch.pow(torch.max(torch.abs(ball_pos[:, 1]) - 0.08525, z), 2)
         x_dist_to_b_goal = torch.pow(ball_pos[:, 0] + 0.61725, 2)
         x_dist_to_w_goal = torch.pow(ball_pos[:, 0] - 0.61725, 2)
+
+        in_b_goal_mask = torch.min(torch.min(ball_pos[:, 0] < -0.61725, ball_pos[:, 0] > -0.7), y_dist == 0)
+        x_dist_to_b_goal[in_b_goal_mask] = 0
+
+        in_w_goal_mask = torch.min(torch.min(ball_pos[:, 0] > 0.61725, ball_pos[:, 0] < 0.7), y_dist == 0)
+        x_dist_to_w_goal[in_w_goal_mask] = 0
+
         dist_to_w_goal = torch.sqrt(x_dist_to_w_goal + y_dist)
         dist_to_b_goal = torch.sqrt(x_dist_to_b_goal + y_dist)
 
@@ -374,7 +385,11 @@ class FoosballTask(BaseTask):
 
     def _dist_to_goal_reward(self, ball_pos):
         dist_to_b_goal, dist_to_w_goal = self._compute_ball_to_goal_distances(ball_pos)
-        dist_to_goal_rew = torch.exp(-6 * dist_to_b_goal)  # - torch.exp(-6*dist_to_w_goal)
+
+        mid_point_distance = 0.6
+        dist_diff = (torch.abs(dist_to_b_goal) - mid_point_distance) / mid_point_distance
+
+        dist_to_goal_rew = 3 * (torch.exp(-3*dist_diff) - 1)
         return dist_to_goal_rew
 
     def _fig_to_ball_reward(self, ball_pos):
@@ -403,14 +418,15 @@ class FoosballTask(BaseTask):
 
         # Check Termination penalty
         limit = self._init_ball_position[0, 2] + self.termination_height
-        termination_mask = ball_pos[:, 2] > limit
-        self.rew_buf[termination_mask] = - self.termination_penalty
+        terminations = ball_pos[:, 2] > limit
+        self.rew_buf[terminations] = - self.termination_penalty
 
         # Check done flags
         goal_mask = torch.max(wins, losses)
         timeouts = self.progress_buf >= self._max_episode_length - 1
+        self.rew_buf[timeouts] = - self.termination_penalty
         self.reset_buf = torch.max(goal_mask, timeouts)
-        self.reset_buf = torch.max(self.reset_buf, termination_mask)
+        self.reset_buf = torch.max(self.reset_buf, terminations)
 
         return wins, losses, timeouts
 

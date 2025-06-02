@@ -6,7 +6,7 @@ physics_engine: ${..physics_engine}
 # if given, will override the device setting in gym.
 env:
   #  numEnvs: ${...num_envs}
-  numEnvs: ${resolve_default:8192,${...num_envs}}
+  numEnvs: ${resolve_default:4096,${...num_envs}}
   envSpacing: 3
   episodeLength: 180  # Set for 360 Hz physics
 
@@ -25,6 +25,7 @@ env:
   lossPenalty: 1000
 
   object_centric_obs: True
+  flatten_obs: False
   applyKalmanFiltering: False
   applyKinematicConstraints: False # Applies a jerk limited scurve planner as low level controller
                                    # Will be overridden if a DMP-based policy is used

@@ -39,7 +39,7 @@ class FoosballMixedSelfPlay(FoosballSelfPlay):
                 rod_idx = self.robot.rod_paths_W.index('White/' + name)
                 mask = self.white_rods_mask[:, rod_idx]
                 one_hot_encoding[mask, 0] = 1
-                inv_one_hot_encoding[mask, 1] = 1  # Register as white for opponent
+                inv_one_hot_encoding[mask, 1] = 1  # Register as Black for opponent
             elif 'B' in name:
                 rod_idx = self.robot.rod_paths_B.index('Black/' + name)
                 mask = self.black_rods_mask[:, rod_idx]
@@ -76,11 +76,17 @@ class FoosballMixedSelfPlay(FoosballSelfPlay):
         obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
         inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_pos[:, None]
         # velocities toward ball should be positive and vice versa
+        obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_vel[:, None]
+        inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_vel[:, None]
         obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
         inv_obs[:, :-1, -3:-1] *= - torch.sign(inv_obs[:, :-1, self._num_obj_types:self._num_obj_types + 2])
 
-        self.obs_buf = obs.flatten(start_dim=1)
-        self.inv_obs_buf = inv_obs.flatten(start_dim=1)
+        if self.flatten_obs:
+            obs = obs.flatten(start_dim=1)
+            inv_obs = inv_obs.flatten(start_dim=1)
+
+        self.obs_buf = obs
+        self.inv_obs_buf = inv_obs
 
     def get_observations(self) -> dict:
         if self.object_centric_obs:

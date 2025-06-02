@@ -9,7 +9,7 @@ params:
     name: continuous_a2c_logstd
 
   network:
-    name: actor_critic  # oc_transformer or actor_critic
+    name: oc_transformer  # oc_transformer or actor_critic
     separate: False
     space:
       continuous:
@@ -26,7 +26,7 @@ params:
           val: 0
         fixed_sigma: True
     mlp:
-      units: [512, 512, 256]
+      units: []
       activation: relu
       d2rl: False
       initializer:
@@ -39,7 +39,7 @@ params:
       num_heads: 8
       num_blocks: 3
       activation: relu
-      dropout_prob: 0.1
+      dropout_prob: 0.0
       pooling_type: 'avg'  # 'max' or 'avg'
 
   dmp:  # If active applies dmp in between policy and env
@@ -75,7 +75,7 @@ params:
     clip_actions: True
     num_actors: ${....task.env.numEnvs}
     reward_shaper:
-      scale_value: 0.01
+      scale_value: 1
     normalize_advantage: True
     gamma: 0.99
     tau: 0.95
@@ -92,7 +92,7 @@ params:
     truncate_grads: True
     e_clip: 0.2
     horizon_length: 16  # 64  # 16
-    minibatch_size: 8192  # 32768  # 65536  # 16384
+    minibatch_size: 16384  # 32768  # 65536  # 16384
     mini_epochs: 8
     critic_coef: 4
     clip_value: True
