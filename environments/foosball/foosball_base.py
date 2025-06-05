@@ -389,7 +389,7 @@ class FoosballTask(BaseTask):
         mid_point_distance = 0.6
         dist_diff = (torch.abs(dist_to_b_goal) - mid_point_distance) / mid_point_distance
 
-        dist_to_goal_rew = 3 * (torch.exp(-3*dist_diff) - 1)
+        dist_to_goal_rew = 10 * (torch.exp(-3*dist_diff) - 1)
         return dist_to_goal_rew
 
     def _fig_to_ball_reward(self, ball_pos):
