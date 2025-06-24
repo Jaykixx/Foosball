@@ -40,6 +40,10 @@ class FoosballSelfPlay(FoosballTask):
         # on reset there are no observations available
         self._full_actions = self._duplicate_actions
 
+        # introduce buffers to catch stalemates and inaction
+        n_history = 60
+        self.ball_vel_history = torch.zeros((self.num_envs, n_history), device=self.device)
+
         self.opponents = None
 
     def add_opponent_action(self, actions):
@@ -108,6 +112,10 @@ class FoosballSelfPlay(FoosballTask):
             self.create_opponent(self._cfg['train'])
         super().reset()
 
+    def reset_idx(self, env_ids):
+        FoosballTask.reset_idx(self, env_ids)
+        self.ball_vel_history[env_ids] = 0
+
     def create_opponent(self, config) -> None:
         r = Runner()
         r.load(config)
@@ -133,6 +141,20 @@ class FoosballSelfPlay(FoosballTask):
         for i in indices:
             self.opponents[i%self.num_opponents].set_weights(weights)
 
+    def detect_stagnating_games(self, timeouts):
+        ball_vel = self._balls.get_velocities(clone=True)[:, :2]
+        ball_vel = torch.norm(ball_vel, dim=-1)
+        self.ball_vel_history = torch.cat((self.ball_vel_history[:, 1:], ball_vel[:, None]), dim=-1)
+
+        # Only consider games that have been running for more than considered
+        # horizon and are not already in timeouts
+        valid_envs = self.progress_buf >= self.ball_vel_history.shape[-1]
+        valid_envs = torch.min(~timeouts, valid_envs)
+        stagnating = (self.ball_vel_history < 5e-2).all(dim=-1)  # No movement across horizon
+        inaction = torch.min(valid_envs, stagnating)
+
+        return inaction, ball_vel
+
     def _calculate_metrics(self):
         wins, losses, timeouts = super()._calculate_metrics()
 
@@ -147,5 +169,15 @@ class FoosballSelfPlay(FoosballTask):
 
         # Optional Reward: Pull figures to ball
         # self.rew_buf += self._fig_to_ball_reward(ball_pos)
+
+        # Detect and punish inaction
+        inaction, ball_vel = self.detect_stagnating_games(timeouts)
+        self.rew_buf[inaction] = - self.termination_penalty
+        self.reset_buf = torch.max(self.reset_buf, inaction)
+
+        # Log mean and standard deviation of ball speed to detect stagnating games
+        self.extras["Stagnation Rate"] = inaction.sum() / self.reset_buf.sum()
+        self.extras["Ball Velocity Avg"] = ball_vel.mean()
+        self.extras["Ball Velocity Std"] = ball_vel.std()
 
         return wins, losses, timeouts

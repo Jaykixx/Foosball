@@ -4,6 +4,7 @@ An extension to rl_games\algos_torch\players.py for new policies.
 
 from rl_games.algos_torch import torch_ext
 from rl_games.common.player import BasePlayer
+from rl_games.algos_torch.players import PpoPlayerContinuous
 from rl_games.common.tr_helpers import unsqueeze_obs
 from rl_games.algos_torch.players import rescale_actions
 
@@ -46,8 +47,9 @@ class A2CPlayer(BasePlayer):
                 self.build_dmp_models(params['dmp'])
 
         self.build_model()
-        # if params.get("opponent", False):  # TODO: Selfplay?
-        #     self.model.eval()
+
+        if params.get("opponent", False):  # TODO: Selfplay?
+            self.model.eval()
 
     @property
     def _env_progress_buffer(self):
@@ -173,17 +175,11 @@ class A2CPlayer(BasePlayer):
         has_masks = False
         has_masks_func = getattr(self.env, "has_action_mask", None) is not None
 
-        op_agent = getattr(self.env, "create_agent", None)
-        if op_agent:
-            agent_inited = True
-            # print('setting agent weights for selfplay')
-            # self.env.create_agent(self.env.config)
-            # self.env.set_weights(range(8),self.get_weights())
-
         if has_masks_func:
             has_masks = self.env.has_action_mask()
 
         need_init_rnn = self.is_rnn
+        opponent_initiated = False
         for _ in range(n_games):
             if games_played >= n_games:
                 break
@@ -191,6 +187,12 @@ class A2CPlayer(BasePlayer):
             obses = self.env_reset(self.env)
             batch_size = 1
             batch_size = self.get_batch_size(obses, batch_size)
+
+            op_agent = getattr(self.env, "has_opponent", None)
+            if op_agent and not opponent_initiated:
+                opponent_initiated = True
+                print('Setting opponent weights for selfplay')
+                self.env.set_weights([0], self.get_weights())
 
             if need_init_rnn:
                 self.init_rnn()

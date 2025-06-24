@@ -114,7 +114,7 @@ class CustomVecEnvRLGames(VecEnvRLGames):
 
     def reset(self):
         obs = super().reset()
-        if self._task.num_agents > 1:
+        if hasattr(self._task, 'opponents') and self._task.opponents is not None:
             self._task.prepare_opponent()
             self._task.obs_bufs = obs
         return obs
@@ -125,7 +125,14 @@ class CustomVecEnvRLGames(VecEnvRLGames):
     def set_weights(self, indices, weights):
         self._task.update_weights(indices, weights)
 
+    @property
+    def has_opponent(self):
+        return hasattr(self._task, 'opponents') and self._task.opponents is not None
+
 
 class SelfPlayRLGPUEnv(RLGPUEnv):
     def set_weights(self, indices, weights) -> None:
         self.env.set_weights(indices, weights)
+
+    def create_opponent(self):
+        self.env.task.create_opponent()
