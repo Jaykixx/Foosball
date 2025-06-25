@@ -9,6 +9,11 @@ This project provides a base of several training scenarios for Foosball:
 - Scoring on resting ball with obstacles (White Keeper + Stationary Opponents)
 - Keeper vs. Keeper with Self Play
 - Full Game with Self Play
+- Mixed Self Play (Each table has a random setup with 1-4 White Rods and 0-4 Black Rods.)
+
+NOTE: This project includes a physical interface to the system built at TU Darmstadt. 
+To reduce unnecessary dependencies a separate branch has been included which only contains simulation related files.
+Please use the corresponding branch "main_sim_only" set as default.
 
 ## Installation
 Please follow the installation instructions for [OmniIsaacGymEnvs](https://github.com/isaac-sim/OmniIsaacGymEnvs/tree/release/4.0.0) to set up the base environment.
@@ -25,7 +30,7 @@ Navigate to the project folder, then run:
 ```bash
 PYTHON_PATH main.py task=FoosballBlocking
 ```
-The execution is otherwise identical to OmniIsaacGymEnvs. For more Information see [Link](https://github.com/isaac-sim/OmniIsaacGymEnvs/tree/release/4.0.0?tab=readme-ov-file#running-the-examples). Checkpoints will be saved in ``<path_to_project>/runs/<task_name>/nn/``.
+The execution is otherwise identical to OmniIsaacGymEnvs. For more Information see [Link](https://github.com/isaac-sim/OmniIsaacGymEnvs/tree/release/4.0.0?tab=readme-ov-file#running-the-examples). Checkpoints will be saved in ``<path_to_project>/runs/<task_name>/Seed_xx/nn/``.
 
 The task names for the various scenarios are:
 - FoosballBlocking
@@ -34,12 +39,13 @@ The task names for the various scenarios are:
 - FoosballScoringRestingObstacles
 - FoosballKeeperSelfPlay
 - FoosballSelfPlay
+- FoosballMixedSelfPlay
 
 The full list of settings can be found in ``<path_to_project>/cfg/``.
 
 For tensorboard run:
 ```bash
-PYTHON_PATH -m tensorboard.main --logdir <path_to_project>/runs/<task_name>/summaries
+PYTHON_PATH -m tensorboard.main --logdir <path_to_project>/runs/<task_name>
 ```
 
 ## Cite

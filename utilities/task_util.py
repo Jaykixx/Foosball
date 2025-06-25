@@ -23,18 +23,10 @@ def initialize_task(config, env, init_sim=True):
     from omniisaacgymenvs.utils.config_utils.sim_config import SimConfig
     sim_config = SimConfig(config)
     cfg = sim_config.config
-    algo = cfg['train']['params']
 
-    # TODO: Deal with ASE in Foosball
-    if algo['framework'] == 'ASE' and algo['train_level'] == 'low':
-        # Initialize empty robotics environment instead
-        task = RobotTask(
-            name=cfg["task_name"], sim_config=sim_config, env=env
-        )
-    else:
-        task = task_map[cfg["task_name"]](
-            name=cfg["task_name"], sim_config=sim_config, env=env
-        )
+    task = task_map[cfg["task_name"]](
+        name=cfg["task_name"], sim_config=sim_config, env=env
+    )
 
     env.set_task(
         task=task,
