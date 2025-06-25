@@ -25,16 +25,9 @@ def initialize_task(config, env, init_sim=True):
     cfg = sim_config.config
     algo = cfg['train']['params']
 
-    # TODO: Deal with ASE in Foosball
-    if algo['framework'] == 'ASE' and algo['train_level'] == 'low':
-        # Initialize empty robotics environment instead
-        task = RobotTask(
-            name=cfg["task_name"], sim_config=sim_config, env=env
-        )
-    else:
-        task = task_map[cfg["task_name"]](
-            name=cfg["task_name"], sim_config=sim_config, env=env
-        )
+    task = task_map[cfg["task_name"]](
+        name=cfg["task_name"], sim_config=sim_config, env=env
+    )
 
     env.set_task(
         task=task,
@@ -42,23 +35,5 @@ def initialize_task(config, env, init_sim=True):
         backend="torch",
         init_sim=init_sim
     )
-
-    return task
-
-
-def initialize_physical_task(config, env):
-    from utilities.system_interfaces.foosball.foosball_interface import FoosballInterface
-
-    task_map = {
-        "FoosballBlocking": FoosballInterface,
-        "FoosballScoringIncoming": FoosballInterface,
-        "FoosballScoringResting": FoosballInterface,
-        "FoosballScoringRestingObstacle": FoosballInterface,
-        "FoosballSelfPlay": FoosballInterface,
-        "FoosballKeeperSelfPlay": FoosballInterface,
-    }
-
-    task = task_map[config["task_name"]](cfg=config)
-    env.set_task(task)
 
     return task

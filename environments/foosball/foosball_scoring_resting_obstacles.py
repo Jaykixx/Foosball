@@ -6,7 +6,7 @@ class FoosballScoringRestingObstacleTask(FoosballScoringRestingTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
         if not hasattr(self, "_num_task_observations"):
-            self._num_observations = 7
+            self._num_task_observations = 7
         if not hasattr(self, "_num_objects"):
             self._num_objects = 8
 

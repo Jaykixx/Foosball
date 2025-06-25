@@ -43,7 +43,7 @@ class FoosballTask(BaseTask):
             # X, Y Pos+Vel, Y Rot+Rotvel
             self._num_obj_features = 6
 
-        super(FoosballTask, self).__init__(name, sim_config, env, offset)
+        BaseTask.__init__(self, name, sim_config, env, offset)
 
         # Termination conditions
         self.termination_height = self._env_cfg["terminationHeight"]

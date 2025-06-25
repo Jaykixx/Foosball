@@ -12,7 +12,7 @@ class FoosballKeeperSelfPlay(FoosballSelfPlay):
         if not hasattr(self, "_num_objects"):
             self._num_objects = 3
 
-        super().__init__(name, sim_config, env, offset)
+        FoosballSelfPlay.__init__(self, name, sim_config, env, offset)
 
     def _order_joints(self) -> list:
         joint_names = self.robot.dof_paths_W + self.robot.dof_paths_B

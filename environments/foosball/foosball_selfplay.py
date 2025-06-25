@@ -31,7 +31,7 @@ class FoosballSelfPlay(FoosballTask):
         else:
             self._full_opponent_obs = False
 
-        super().__init__(name, sim_config, env, offset)
+        FoosballTask.__init__(self, name, sim_config, env, offset)
 
         # Reset parameters
         self.reset_position_noise = self._task_cfg["env"]["resetPositionNoise"]
@@ -135,14 +135,22 @@ class FoosballSelfPlay(FoosballTask):
             inv_one_hot_encoding = torch.zeros_like(one_hot_encoding)
             if 'W' in name:
                 rod_idx = self.robot.rod_paths_W.index('White/' + name)
-                mask = self.white_rods_mask[:, rod_idx]
-                one_hot_encoding[mask, 0] = 1
-                inv_one_hot_encoding[mask, 1] = 1  # Register as Black for opponent
+                if hasattr(self, 'white_rods_mask'):
+                    mask = self.white_rods_mask[:, rod_idx]
+                    one_hot_encoding[mask, 0] = 1
+                    inv_one_hot_encoding[mask, 1] = 1  # Register as Black for opponent
+                else:
+                    one_hot_encoding[:, 0] = 1
+                    inv_one_hot_encoding[:, 1] = 1  # Register as Black for opponent
             elif 'B' in name:
                 rod_idx = self.robot.rod_paths_B.index('Black/' + name)
-                mask = self.black_rods_mask[:, rod_idx]
-                one_hot_encoding[mask, 1] = 1
-                inv_one_hot_encoding[mask, 0] = 1  # Register as white for opponent
+                if hasattr(self, 'black_rods_mask'):
+                    mask = self.black_rods_mask[:, rod_idx]
+                    one_hot_encoding[mask, 0] = 1
+                    inv_one_hot_encoding[mask, 1] = 1  # Register as white for opponent
+                else:
+                    one_hot_encoding[:, 0] = 1
+                    inv_one_hot_encoding[:, 1] = 1  # Register as white for opponent
 
             fig_obs = torch.cat((
                 one_hot_encoding, fig_tpos, fig_rpos, fig_tvel, fig_rvel,
