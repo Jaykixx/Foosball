@@ -26,6 +26,11 @@ env:
 
   num_opponents: 1
 
+  # IMPORTANT: Object centric obs do not reorganize opponent obs only negate obs
+  #            Use with caution on standard policies!
+  object_centric_obs: False  # Obs will have shape num_envs x num_obj x num_features
+  flatten_obs: False  # Flattens object centric obs to num_envs x (num_obj * num_features)
+
   applyKalmanFiltering: False
   applyKinematicConstraints: True  # Applies a jerk limited scurve planner as low level controller
                                    # Will be overridden if a DMP-based policy is used

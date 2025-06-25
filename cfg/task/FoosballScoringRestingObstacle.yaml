@@ -23,7 +23,9 @@ env:
   winReward: 0
   lossPenalty: 1000
 
-  object_centric_obs: True
+  object_centric_obs: False  # Obs will have shape num_envs x num_obj x num_features
+  flatten_obs: False  # Flattens object centric obs to num_envs x (num_obj * num_features)
+
   applyKalmanFiltering: False
   applyKinematicConstraints: False  # Applies a jerk limited scurve planner as low level controller
                                    # Will be overridden if a DMP-based policy is used

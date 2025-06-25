@@ -11,7 +11,6 @@ import time
 class FoosballSelfPlay(FoosballTask):
 
     def __init__(self, name, sim_config, env, offset=None) -> None:
-        # self._num_agents = 2
         if not hasattr(self, "_num_actions"):
             # Defines action space for AI
             self._num_actions = 8
@@ -20,10 +19,17 @@ class FoosballSelfPlay(FoosballTask):
             self._dof = 2 * self._num_actions
         if not hasattr(self, "_num_task_observations"):
             # Ball + Opponents (pos + vel)
-            # self._num_task_observations = 2 * self.num_actions + 4
+            self._num_task_observations = 2 * self.num_actions + 4
 
+            # Second option only relevant for playtest on real system due to limited obs
+            # Only applicable to standard obs since object centric will require same features per object
             # Ball + Opponents Prismatic Joints (pos + vel)
-            self._num_task_observations = self.num_actions + 4
+            # self._num_task_observations = self.num_actions + 4
+
+        if self._num_task_observations == (2 * self.num_actions + 4):
+            self._full_opponent_obs = True
+        else:
+            self._full_opponent_obs = False
 
         super().__init__(name, sim_config, env, offset)
 
@@ -40,7 +46,7 @@ class FoosballSelfPlay(FoosballTask):
         # on reset there are no observations available
         self._full_actions = self._duplicate_actions
 
-        # introduce buffers to catch stalemates and inaction
+        # introduce buffers to catch stagnating game states
         n_history = 60
         self.ball_vel_history = torch.zeros((self.num_envs, n_history), device=self.device)
 
@@ -64,7 +70,7 @@ class FoosballSelfPlay(FoosballTask):
         super().cleanup()
         self.inv_obs_buf = torch.zeros_like(self.obs_buf)
 
-    def get_observations(self) -> dict:
+    def get_standard_observations(self) -> dict:
         dof_pos = self._robots.get_joint_positions(joint_indices=self.active_joint_dofs, clone=False)
         dof_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
         dof_pos_w = dof_pos[:, :self.num_actions]
@@ -77,17 +83,118 @@ class FoosballSelfPlay(FoosballTask):
         ball_pos = ball_w_pos[:, :2] - self._env_pos[:, :2]
         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
 
-        self.obs_buf = torch.cat(
-            (dof_pos_w, dof_vel_w, dof_pos_b, dof_vel_b, ball_pos, ball_vel), dim=-1
-        )
+        if self._full_opponent_obs:
+            self.obs_buf = torch.cat(
+                (dof_pos_w, dof_vel_w, dof_pos_b, dof_vel_b, ball_pos, ball_vel), dim=-1
+            )
 
-        self.inv_obs_buf = torch.cat(
-            (dof_pos_b, dof_vel_b, dof_pos_w, dof_vel_w, -ball_pos, -ball_vel), dim=-1
-        ).clone()
+            self.inv_obs_buf = torch.cat(
+                (dof_pos_b, dof_vel_b, dof_pos_w, dof_vel_w, -ball_pos, -ball_vel), dim=-1
+            ).clone()
+        else:
+            # num_actions is always even in selfplay (2 Joints per rod)
+            half_obs = int(self.num_actions // 2)
+            self.obs_buf = torch.cat(
+                (dof_pos_w, dof_vel_w, dof_pos_b[:, :half_obs], dof_vel_b[:, :half_obs], ball_pos, ball_vel), dim=-1
+            )
+
+            self.inv_obs_buf = torch.cat(
+                (dof_pos_b, dof_vel_b, dof_pos_w[:, :half_obs], dof_vel_w[:, :half_obs], -ball_pos, -ball_vel), dim=-1
+            ).clone()
 
         observations = {
             self._robots.name: {
                 "obs_buf": self.obs_buf
+            }
+        }
+
+        if self.capture:
+            self.capture_image()
+        return observations
+
+    def get_obj_centric_observations(self):
+        obj_obs = []
+        inv_obj_obs = []  # Contains inverted obs for opponent query
+        for name, value in self.active_rods.items():
+            # TODO: Rescale to table size
+            sign = -1 if 'W' in name else 1  # Joints for black are mirrored so signs are needed
+
+            fig_tpos = self.robot.figure_positions[name][None].repeat_interleave(self.num_envs, 0)
+            fig_tpos[:, 1] += sign * self._robots.get_joint_positions(joint_indices=[value['pris_id']], clone=False)
+
+            dof_rpos = sign * self._robots.get_joint_positions(joint_indices=[value['rev_id']], clone=False)
+            fig_rpos = dof_rpos[..., None].repeat_interleave(fig_tpos.shape[-1], -1)
+
+            fig_tvel = torch.zeros_like(fig_tpos)
+            fig_tvel[:, 1] = sign * self._robots.get_joint_velocities(joint_indices=[value['pris_id']], clone=False)
+
+            dof_rvel = sign * self._robots.get_joint_velocities(joint_indices=[value['rev_id']], clone=False)
+            fig_rvel = dof_rvel[..., None].repeat_interleave(fig_tvel.shape[-1], -1)
+
+            one_hot_encoding = torch.zeros((self.num_envs, self._num_obj_types, fig_tpos.shape[-1]), device=self.device)
+            inv_one_hot_encoding = torch.zeros_like(one_hot_encoding)
+            if 'W' in name:
+                rod_idx = self.robot.rod_paths_W.index('White/' + name)
+                mask = self.white_rods_mask[:, rod_idx]
+                one_hot_encoding[mask, 0] = 1
+                inv_one_hot_encoding[mask, 1] = 1  # Register as Black for opponent
+            elif 'B' in name:
+                rod_idx = self.robot.rod_paths_B.index('Black/' + name)
+                mask = self.black_rods_mask[:, rod_idx]
+                one_hot_encoding[mask, 1] = 1
+                inv_one_hot_encoding[mask, 0] = 1  # Register as white for opponent
+
+            fig_obs = torch.cat((
+                one_hot_encoding, fig_tpos, fig_rpos, fig_tvel, fig_rvel,
+            ), dim=1).transpose(1, 2)
+
+            # Order of objects irrelevant for object centric transformers
+            #   so instead we keep object order and only switch perspective
+            inv_fig_obs = torch.cat((
+                inv_one_hot_encoding, -fig_tpos, -fig_rpos, -fig_tvel, -fig_rvel,
+            ), dim=1).transpose(1, 2)
+
+            obj_obs.append(fig_obs)
+            inv_obj_obs.append(inv_fig_obs)
+
+        ball_obs = torch.zeros((self.num_envs, self._num_obj_features + self._num_obj_types), device=self.device)
+        ball_pos, ball_vel = self.get_ball_observation()
+        ball_obs[..., self._num_obj_types-1] = 1
+        ball_obs[..., self._num_obj_types:self._num_obj_types+2] = ball_pos
+        ball_obs[..., -3:-1] = ball_vel
+        inv_ball_obs = ball_obs.clone()
+        inv_ball_obs[..., self._num_obj_types:] *= -1
+        obj_obs.append(ball_obs[:, None])
+        inv_obj_obs.append(inv_ball_obs[:, None])
+
+        obs = torch.cat(obj_obs, dim=1)
+        inv_obs = torch.cat(inv_obj_obs, dim=1)
+
+        # Center obs around ball
+        obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
+        inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_pos[:, None]
+        # velocities toward ball should be positive and vice versa
+        obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_vel[:, None]
+        inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_vel[:, None]
+        obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
+        inv_obs[:, :-1, -3:-1] *= - torch.sign(inv_obs[:, :-1, self._num_obj_types:self._num_obj_types + 2])
+
+        if self.flatten_obs:
+            obs = obs.flatten(start_dim=1)
+            inv_obs = inv_obs.flatten(start_dim=1)
+
+        self.obs_buf = obs
+        self.inv_obs_buf = inv_obs
+
+    def get_observations(self) -> dict:
+        if self.object_centric_obs:
+            self.get_obj_centric_observations()
+        else:
+            self.get_standard_observations()
+
+        observations = {
+            self._robots.name: {
+                "obs_buf": self.obs_buf,
             }
         }
 

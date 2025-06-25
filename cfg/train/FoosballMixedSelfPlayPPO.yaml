@@ -75,11 +75,11 @@ params:
     clip_actions: True
     num_actors: ${....task.env.numEnvs}
     reward_shaper:
-      scale_value: 1
+      scale_value: 0.01
     normalize_advantage: True
-    gamma: 0.99
+    gamma: 0.995
     tau: 0.95
-    learning_rate: 5e-5
+    learning_rate: 1e-3
     lr_schedule: adaptive
     schedule_type: legacy
     kl_threshold: 0.008
@@ -91,7 +91,7 @@ params:
     entropy_coef: 0.0001
     truncate_grads: True
     e_clip: 0.2
-    horizon_length: 256  # 64  # 16
+    horizon_length: 128  # 64  # 16
     minibatch_size: 32768  # 32768  # 65536  # 16384
     mini_epochs: 1
     critic_coef: 4
