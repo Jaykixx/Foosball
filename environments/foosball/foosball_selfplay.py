@@ -122,14 +122,14 @@ class FoosballSelfPlay(FoosballTask):
             fig_tpos = self.robot.figure_positions[name][None].repeat_interleave(self.num_envs, 0)
             fig_tpos[:, 1] += sign * self._robots.get_joint_positions(joint_indices=[value['pris_id']], clone=False)
 
-            dof_rpos = sign * self._robots.get_joint_positions(joint_indices=[value['rev_id']], clone=False)
-            fig_rpos = dof_rpos[..., None].repeat_interleave(fig_tpos.shape[-1], -1)
+            fig_rpos = sign * self._robots.get_joint_positions(joint_indices=[value['rev_id']], clone=False)
+            fig_rpos = fig_rpos[..., None].repeat_interleave(fig_tpos.shape[-1], -1)
 
             fig_tvel = torch.zeros_like(fig_tpos)
             fig_tvel[:, 1] = sign * self._robots.get_joint_velocities(joint_indices=[value['pris_id']], clone=False)
 
-            dof_rvel = sign * self._robots.get_joint_velocities(joint_indices=[value['rev_id']], clone=False)
-            fig_rvel = dof_rvel[..., None].repeat_interleave(fig_tvel.shape[-1], -1)
+            fig_rvel = sign * self._robots.get_joint_velocities(joint_indices=[value['rev_id']], clone=False)
+            fig_rvel = fig_rvel[..., None].repeat_interleave(fig_tvel.shape[-1], -1)
 
             one_hot_encoding = torch.zeros((self.num_envs, self._num_obj_types, fig_tpos.shape[-1]), device=self.device)
             inv_one_hot_encoding = torch.zeros_like(one_hot_encoding)
@@ -146,11 +146,11 @@ class FoosballSelfPlay(FoosballTask):
                 rod_idx = self.robot.rod_paths_B.index('Black/' + name)
                 if hasattr(self, 'black_rods_mask'):
                     mask = self.black_rods_mask[:, rod_idx]
-                    one_hot_encoding[mask, 0] = 1
-                    inv_one_hot_encoding[mask, 1] = 1  # Register as white for opponent
+                    one_hot_encoding[mask, 1] = 1
+                    inv_one_hot_encoding[mask, 0] = 1  # Register as white for opponent
                 else:
-                    one_hot_encoding[:, 0] = 1
-                    inv_one_hot_encoding[:, 1] = 1  # Register as white for opponent
+                    one_hot_encoding[:, 1] = 1
+                    inv_one_hot_encoding[:, 0] = 1  # Register as white for opponent
 
             fig_obs = torch.cat((
                 one_hot_encoding, fig_tpos, fig_rpos, fig_tvel, fig_rvel,
