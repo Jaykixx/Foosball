@@ -6,7 +6,7 @@ physics_engine: ${..physics_engine}
 # if given, will override the device setting in gym.
 env:
   #  numEnvs: ${...num_envs}
-  numEnvs: ${resolve_default:2048,${...num_envs}}  # 16384
+  numEnvs: ${resolve_default:16,${...num_envs}}  # 16384
   envSpacing: 3
   episodeLength: 900  # x = desired_time / (controlFrequencyInv * sim.dt)
 
@@ -30,7 +30,7 @@ env:
   #            Use with caution in selfplay scenarios! They are designed for transformers.
   # NOTE: To maintain batchwise observations all rods will be observed regardless of which are active.
   #       In case of object centric obs the object-identifier one-hot-encoding will be fully zero for inactive rods.
-  object_centric_obs: False  # Obs will have shape num_envs x num_obj x num_features
+  object_centric_obs: True  # Obs will have shape num_envs x num_obj x num_features
   flatten_obs: False  # Flattens object centric obs to num_envs x (num_obj * num_features)
 
   applyKalmanFiltering: False

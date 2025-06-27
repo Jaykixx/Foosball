@@ -9,7 +9,7 @@ params:
     name: continuous_a2c_logstd
 
   network:
-    name: actor_critic  # oc_transformer or actor_critic
+    name: oc_transformer  # oc_transformer or actor_critic
     separate: False
     space:
       continuous:
