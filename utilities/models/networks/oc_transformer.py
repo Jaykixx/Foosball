@@ -18,7 +18,7 @@ class OCTBuilder(NetworkBuilder):
         def __init__(self, params, **kwargs):
             actions_num = kwargs.pop('actions_num')
             input_shape = kwargs.pop('input_shape')
-            self.num_object_types = kwargs.pop('num_object_types')
+            self.num_object_types = kwargs.get('num_object_types', None)
             self.value_size = kwargs.pop('value_size', 1)
 
             NetworkBuilder.BaseNetwork.__init__(self)

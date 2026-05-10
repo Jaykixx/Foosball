@@ -48,6 +48,7 @@ class FoosballTask(BaseTask):
         # Termination conditions
         self.termination_height = self._env_cfg["terminationHeight"]
         self.termination_penalty = self._env_cfg["terminationPenalty"]
+        self.timeout_penalty = self._env_cfg.get("timeoutPenalty", 1000)
 
         # Win and Loss Rewards
         self.win_reward = self._env_cfg["winReward"]
@@ -427,7 +428,7 @@ class FoosballTask(BaseTask):
         # Check done flags
         goal_mask = torch.max(wins, losses)
         timeouts = self.progress_buf >= self._max_episode_length - 1
-        self.rew_buf[timeouts] = - self.termination_penalty
+        self.rew_buf[timeouts] = - self.timeout_penalty
         self.reset_buf = torch.max(goal_mask, timeouts)
         self.reset_buf = torch.max(self.reset_buf, terminations)
 

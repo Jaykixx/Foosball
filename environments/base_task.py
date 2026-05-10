@@ -345,7 +345,7 @@ class BaseTask(RLTask):
         for i, rgb_annotator in enumerate(self.rgb_annotators):
             data = rgb_annotator.get_data()
             if len(data) > 0:  # Catch cases after reset
-                frame_path = os.path.join(self.frame_path, f"Trial_{self.trial_counter[i].item():02}")
+                frame_path = os.path.join(self.frame_paths[i], f"Trial_{self.trial_counter[i].item():02}")
                 if not os.path.isdir(frame_path):
                     os.makedirs(frame_path, exist_ok=True)
                 path = frame_path + f"/frame_{self.frame_id[i].item():04}"

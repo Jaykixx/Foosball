@@ -59,7 +59,7 @@ class FoosballSelfPlay(FoosballTask):
                     self.inv_obs_buf[
                         self.opponents_obs_ranges[i]:self.opponents_obs_ranges[i + 1],
                         ...
-                    ]
+                    ], is_deterministic=True
                 ).detach()
             )
             for i in range(self.num_opponents)
@@ -112,9 +112,25 @@ class FoosballSelfPlay(FoosballTask):
             self.capture_image()
         return observations
 
+    @staticmethod
+    def sort_obj_centric_obs(obs, inverse: bool = False):
+        x_sorted, sorted_idx = torch.sort(obs[0, :, 3], descending=not inverse)
+        unique_x = torch.unique(x_sorted)
+        for x in unique_x:
+            fig_idx = sorted_idx[x_sorted == x]
+            y_sort_idx = torch.sort(obs[0, fig_idx, 4], descending=False).indices
+            sorted_idx[x_sorted == x] = fig_idx[y_sort_idx]
+        return obs[:, sorted_idx]
+
     def get_obj_centric_observations(self):
-        obj_obs = []
-        inv_obj_obs = []  # Contains inverted obs for opponent query
+        obj_obs = {
+            'player_obs': [],
+            'opponent_obs': [],
+        }
+        inv_obj_obs = {  # Contains inverted obs for opponent query
+            'player_obs': [],  # Here used for opponent
+            'opponent_obs': [],  # Here used for player
+        }
         for name, value in self.active_rods.items():
             # TODO: Rescale to table size
             sign = -1 if 'W' in name else 1  # Joints for black are mirrored so signs are needed
@@ -162,8 +178,29 @@ class FoosballSelfPlay(FoosballTask):
                 inv_one_hot_encoding, -fig_tpos, -fig_rpos, -fig_tvel, -fig_rvel,
             ), dim=1).transpose(1, 2)
 
-            obj_obs.append(fig_obs)
-            inv_obj_obs.append(inv_fig_obs)
+            if 'W' in name:
+                obj_obs['player_obs'].append(fig_obs)
+                inv_obj_obs['opponent_obs'].append(inv_fig_obs)
+            elif 'B' in name:
+                obj_obs['opponent_obs'].append(fig_obs)
+                inv_obj_obs['player_obs'].append(inv_fig_obs)
+
+            # obj_obs.append(fig_obs)
+            # inv_obj_obs.append(inv_fig_obs)
+
+        obj_obs['player_obs'] = self.sort_obj_centric_obs(
+            torch.cat(obj_obs['player_obs'], dim=1)
+        )
+        obj_obs['opponent_obs'] = self.sort_obj_centric_obs(
+            torch.cat(obj_obs['opponent_obs'], dim=1), inverse=True
+        )
+
+        inv_obj_obs['player_obs'] = self.sort_obj_centric_obs(
+            torch.cat(inv_obj_obs['player_obs'], dim=1)
+        )
+        inv_obj_obs['opponent_obs'] = self.sort_obj_centric_obs(
+            torch.cat(inv_obj_obs['opponent_obs'], dim=1), inverse=True
+        )
 
         ball_obs = torch.zeros((self.num_envs, self._num_obj_features + self._num_obj_types), device=self.device)
         ball_pos, ball_vel = self.get_ball_observation()
@@ -172,11 +209,11 @@ class FoosballSelfPlay(FoosballTask):
         ball_obs[..., -3:-1] = ball_vel
         inv_ball_obs = ball_obs.clone()
         inv_ball_obs[..., self._num_obj_types:] *= -1
-        obj_obs.append(ball_obs[:, None])
-        inv_obj_obs.append(inv_ball_obs[:, None])
+        obj_obs['ball'] = ball_obs[:, None]
+        inv_obj_obs['ball'] = inv_ball_obs[:, None]
 
-        obs = torch.cat(obj_obs, dim=1)
-        inv_obs = torch.cat(inv_obj_obs, dim=1)
+        obs = torch.cat(list(obj_obs.values()), dim=1)
+        inv_obs = torch.cat(list(inv_obj_obs.values()), dim=1)
 
         # Center obs around ball
         obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
