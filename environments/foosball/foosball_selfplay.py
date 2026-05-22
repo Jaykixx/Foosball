@@ -102,16 +102,6 @@ class FoosballSelfPlay(FoosballTask):
                 (dof_pos_b, dof_vel_b, dof_pos_w[:, :half_obs], dof_vel_w[:, :half_obs], -ball_pos, -ball_vel), dim=-1
             ).clone()
 
-        observations = {
-            self._robots.name: {
-                "obs_buf": self.obs_buf
-            }
-        }
-
-        if self.capture:
-            self.capture_image()
-        return observations
-
     @staticmethod
     def sort_obj_centric_obs(obs, inverse: bool = False):
         x_sorted, sorted_idx = torch.sort(obs[0, :, 3], descending=not inverse)

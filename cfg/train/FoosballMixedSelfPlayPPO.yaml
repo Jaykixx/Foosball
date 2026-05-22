@@ -26,8 +26,8 @@ params:
           val: 0
         fixed_sigma: True
     mlp:
-      units: []
-      activation: relu
+      units: [256, 256, 128]
+      activation: tanh
       d2rl: False
       initializer:
         name: default
@@ -77,9 +77,9 @@ params:
     reward_shaper:
       scale_value: 0.01
     normalize_advantage: True
-    gamma: 0.995
+    gamma: 0.99
     tau: 0.95
-    learning_rate: 1e-3
+    learning_rate: 3e-4
     lr_schedule: adaptive
     schedule_type: legacy
     kl_threshold: 0.008
@@ -91,8 +91,8 @@ params:
     entropy_coef: 0.0001
     truncate_grads: True
     e_clip: 0.2
-    horizon_length: 128  # 64  # 16
-    minibatch_size: 32768  # 32768  # 65536  # 16384
+    horizon_length: 16  # 64  # 16
+    minibatch_size: 4096  # 32768  # 65536  # 16384
     mini_epochs: 1
     critic_coef: 4
     clip_value: True
