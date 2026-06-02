@@ -1,3 +1,5 @@
+import glob
+
 import isaacsim
 from omniisaacgymenvs.utils.hydra_cfg.hydra_utils import *
 from omniisaacgymenvs.utils.hydra_cfg.reformat import omegaconf_to_dict, print_dict
@@ -53,8 +55,7 @@ class RLGTrainer:
         runner.reset()
 
         # dump config dict
-        experiment_dir = os.path.join('runs', self.cfg.train.params.config.name)
-        os.makedirs(experiment_dir, exist_ok=True)
+        experiment_dir = self.cfg.train["params"]["config"]["train_dir"]
         with open(os.path.join(experiment_dir, 'config.yaml'), 'w') as f:
             f.write(OmegaConf.to_yaml(self.cfg))
 
@@ -116,10 +117,40 @@ def parse_hydra_configs(cfg: DictConfig):
     from utilities.task_util import initialize_task
     task = initialize_task(cfg_dict, env)
 
+    if cfg.wandb_activate and global_rank == 0:
+        # Make sure to install WandB if you actually use this.
+        import wandb
+
+        run_name = f"{cfg.wandb_name}_{time_str}"
+
+
+        log_dir = f"{cfg.log_dir}/{cfg.task_name}/Seed_{cfg.seed}"
+        wandb.tensorboard.patch(tensorboard_x=True, pytorch=True, root_logdir=f"{log_dir}/summaries")
+
+        wandb_run= wandb.init(
+            project=cfg.wandb_project,
+            group=cfg.wandb_group,
+            entity=cfg.wandb_entity,
+            config=cfg_dict,
+            name=run_name,
+            resume="allow",
+            dir=log_dir,
+            sync_tensorboard=True,
+            monitor_gym=True,
+        )
+
     rlg_trainer = RLGTrainer(cfg, cfg_dict)
     rlg_trainer.launch_rlg_hydra(env)
     rlg_trainer.run()
+
     env.close()
+
+    if cfg.wandb_activate and global_rank == 0:
+        tf_files = glob.glob(f"{log_dir}/summaries/events.out.tfevents.*")
+        tf_files.sort(key=os.path.getmtime, reverse=True)
+        wandb_run.save(tf_files[0])
+        wandb_run.log_model(path=f"{log_dir}/nn/{cfg.task_name}.pth")
+        wandb.finish()
 
 
 if __name__ == '__main__':

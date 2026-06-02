@@ -101,3 +101,4 @@ params:
     # wocar config
     woc_critic_coef: 0.6  # Regulates conservativeness of policy, default 0.2
     obs_dist: 0.2  # max observation perturbation distance
+    train_dir: ${....log_dir}
