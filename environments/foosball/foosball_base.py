@@ -35,10 +35,10 @@ class FoosballTask(BaseTask):
             self._num_observations = self._num_joint_observations + self._num_task_observations
         if not hasattr(self, "_num_objects"):
             # Number of involved figurines + ball
-            self._num_objects = 23
+            self._num_objects = 25
         if not hasattr(self, "_num_obj_types"):
-            # White, Black & Ball
-            self._num_obj_types = 3
+            # White, Black, White Goal, Black Goal & Ball
+            self._num_obj_types = 5
         if not hasattr(self, "_num_obs_per_object"):
             # X, Y Pos+Vel, Y Rot+Rotvel
             self._num_obj_features = 6
@@ -251,9 +251,9 @@ class FoosballTask(BaseTask):
 
         # Center obs around ball
         obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
-        # velocities toward ball should be positive and vice versa
+        # velocities toward ball should be positive and vice versa -> NOPE!
         obs[:, :-1, self._num_obj_types:self._num_obj_types + 2] -= ball_vel[:, None]
-        obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
+        # obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
 
         if self.flatten_obs:
             obs = obs.flatten(start_dim=1)

@@ -192,11 +192,29 @@ class FoosballSelfPlay(FoosballTask):
             torch.cat(inv_obj_obs['opponent_obs'], dim=1), inverse=True
         )
 
+        # goals
+        obj_obs['player_goal'] = torch.zeros((self.num_envs, 1, self._num_obj_features + self._num_obj_types), device=self.device)
+        obj_obs['opponent_goal'] = torch.zeros_like(obj_obs['player_goal'])
+        inv_obj_obs['player_goal'] = torch.zeros_like(obj_obs['player_goal'])
+        inv_obj_obs['opponent_goal'] = torch.zeros_like(obj_obs['player_goal'])
+
+        obj_obs['player_goal'][..., self._num_obj_types - 3] = 1
+        obj_obs['opponent_goal'][..., self._num_obj_types - 2] = 1
+        inv_obj_obs['player_goal'][..., self._num_obj_types - 3] = 1
+        inv_obj_obs['opponent_goal'][..., self._num_obj_types - 2] = 1
+
+        obj_obs['player_goal'][..., self._num_obj_types] = 0.6
+        obj_obs['opponent_goal'][..., self._num_obj_types] = -0.6
+        inv_obj_obs['player_goal'][..., self._num_obj_types] = 0.6
+        inv_obj_obs['opponent_goal'][..., self._num_obj_types] = -0.6
+
+        # ball
         ball_obs = torch.zeros((self.num_envs, self._num_obj_features + self._num_obj_types), device=self.device)
         ball_pos, ball_vel = self.get_ball_observation()
         ball_obs[..., self._num_obj_types-1] = 1
-        ball_obs[..., self._num_obj_types:self._num_obj_types+2] = ball_pos
-        ball_obs[..., -3:-1] = ball_vel
+        # zero ball pose
+        # ball_obs[..., self._num_obj_types:self._num_obj_types+2] = ball_pos
+        # ball_obs[..., -3:-1] = ball_vel
         inv_ball_obs = ball_obs.clone()
         inv_ball_obs[..., self._num_obj_types:] *= -1
         obj_obs['ball'] = ball_obs[:, None]
@@ -208,11 +226,11 @@ class FoosballSelfPlay(FoosballTask):
         # Center obs around ball
         obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
         inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_pos[:, None]
-        # velocities toward ball should be positive and vice versa
-        obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_vel[:, None]
-        inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_vel[:, None]
-        obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
-        inv_obs[:, :-1, -3:-1] *= - torch.sign(inv_obs[:, :-1, self._num_obj_types:self._num_obj_types + 2])
+        # velocities toward ball should be positive and vice versa -> NOPE!
+        obs[:, :-1, -3:-1] -= ball_vel[:, None]
+        inv_obs[:, :-1, -3:-1] += ball_vel[:, None]
+        # obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
+        # inv_obs[:, :-1, -3:-1] *= - torch.sign(inv_obs[:, :-1, self._num_obj_types:self._num_obj_types + 2])
 
         if self.flatten_obs:
             obs = obs.flatten(start_dim=1)
@@ -318,7 +336,10 @@ class FoosballSelfPlay(FoosballTask):
         self.reset_buf = torch.max(self.reset_buf, inaction)
 
         # Log mean and standard deviation of ball speed to detect stagnating games
-        self.extras["Stagnation Rate"] = inaction.sum() / self.reset_buf.sum()
+        if self.reset_buf.sum() > 0:
+            self.extras["Stagnation Rate"] = inaction.sum() / self.reset_buf.sum()
+        else:
+            self.extras["Stagnation Rate"] = 0.0
         self.extras["Ball Velocity Avg"] = ball_vel.mean()
         self.extras["Ball Velocity Std"] = ball_vel.std()
 
