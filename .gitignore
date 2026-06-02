@@ -6,3 +6,5 @@ runs/
 .thumbs/
 /utilities/Models/.thumbs/
 
+/test/
+/wandb/
