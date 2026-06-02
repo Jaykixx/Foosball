@@ -7,6 +7,7 @@ from utilities.models.low_level_controllers.dmps.dmp_builder import DMPBuilder
 from utilities.models import model_builder
 
 from gym import spaces
+from rtpt import RTPT
 import numpy as np
 import torch
 import time
@@ -408,6 +409,9 @@ class ContinuousA2CBase(CustomA2CBase):
             dist.broadcast_object_list(model_params, 0)
             self.model.load_state_dict(model_params[0])
 
+        max_iter = self.max_epochs if self.max_epochs != -1 else self.max_frames // self.num_agents
+        rtpt = RTPT(name_initials='CD', experiment_name='Foosball', max_iterations=max_iter)
+        rtpt.start()
         while True:
             epoch_num = self.update_epoch()
             step_time, play_time, update_time, sum_time, a_losses, c_losses, b_losses, entropies, kls, last_lr, lr_mul = self.train_epoch()
@@ -426,6 +430,8 @@ class ContinuousA2CBase(CustomA2CBase):
                 curr_frames = self.curr_frames * self.world_size if self.multi_gpu else self.curr_frames
                 self.frame += curr_frames
 
+                t_step = time.time()
+
                 print_statistics(self.print_stats, curr_frames, step_time, scaled_play_time, scaled_time,
                                  epoch_num, self.max_epochs, frame, self.max_frames)
 
@@ -434,10 +440,10 @@ class ContinuousA2CBase(CustomA2CBase):
                                 scaled_time, scaled_play_time, curr_frames)
 
                 if len(b_losses) > 0:
-                    self.writer.add_scalar('losses/bounds_loss', torch_ext.mean_list(b_losses).item(), frame)
+                    self.writer.add_scalar('losses/bounds_loss', torch_ext.mean_list(b_losses).item(), frame, t_step)
 
                 if self.has_soft_aug:
-                    self.writer.add_scalar('losses/aug_loss', np.mean(aug_losses), frame)
+                    self.writer.add_scalar('losses/aug_loss', np.mean(aug_losses), frame, t_step)
 
                 if self.game_rewards.current_size > 0:
                     mean_rewards = self.game_rewards.get_mean()
@@ -447,16 +453,16 @@ class ContinuousA2CBase(CustomA2CBase):
 
                     for i in range(self.value_size):
                         rewards_name = 'rewards' if i == 0 else 'rewards{0}'.format(i)
-                        self.writer.add_scalar(rewards_name + '/step'.format(i), mean_rewards[i], frame)
-                        self.writer.add_scalar(rewards_name + '/iter'.format(i), mean_rewards[i], epoch_num)
-                        self.writer.add_scalar(rewards_name + '/time'.format(i), mean_rewards[i], total_time)
-                        self.writer.add_scalar('shaped_' + rewards_name + '/step'.format(i), mean_shaped_rewards[i], frame)
-                        self.writer.add_scalar('shaped_' + rewards_name + '/iter'.format(i), mean_shaped_rewards[i], epoch_num)
-                        self.writer.add_scalar('shaped_' + rewards_name + '/time'.format(i), mean_shaped_rewards[i], total_time)
+                        self.writer.add_scalar(rewards_name + '/step'.format(i), mean_rewards[i], frame, t_step)
+                        self.writer.add_scalar(rewards_name + '/iter'.format(i), mean_rewards[i], epoch_num, t_step)
+                        self.writer.add_scalar(rewards_name + '/time'.format(i), mean_rewards[i], total_time, t_step)
+                        self.writer.add_scalar('shaped_' + rewards_name + '/step'.format(i), mean_shaped_rewards[i], frame, t_step)
+                        self.writer.add_scalar('shaped_' + rewards_name + '/iter'.format(i), mean_shaped_rewards[i], epoch_num, t_step)
+                        self.writer.add_scalar('shaped_' + rewards_name + '/time'.format(i), mean_shaped_rewards[i], total_time, t_step)
 
-                    self.writer.add_scalar('episode_lengths/step', mean_lengths, frame)
-                    self.writer.add_scalar('episode_lengths/iter', mean_lengths, epoch_num)
-                    self.writer.add_scalar('episode_lengths/time', mean_lengths, total_time)
+                    self.writer.add_scalar('episode_lengths/step', mean_lengths, frame, t_step)
+                    self.writer.add_scalar('episode_lengths/iter', mean_lengths, epoch_num, t_step)
+                    self.writer.add_scalar('episode_lengths/time', mean_lengths, total_time, t_step)
 
                     if self.has_self_play_config:
                         self.self_play_manager.update(self)
@@ -499,6 +505,7 @@ class ContinuousA2CBase(CustomA2CBase):
                     should_exit = True
 
                 update_time = 0
+                rtpt.step()
 
             if self.multi_gpu:
                 should_exit_t = torch.tensor(should_exit, device=self.device).float()
