@@ -19,11 +19,11 @@ env:
   resetVelocityNoise: 5
 
   terminationHeight: 0.10
-  terminationPenalty: 1
-  timeoutPenalty: 0.2
+  terminationPenalty: 10
+  timeoutPenalty: 4
 
-  winReward: 1
-  lossPenalty: 1
+  winReward: 20
+  lossPenalty: 20
 
   num_opponents: 1
 
