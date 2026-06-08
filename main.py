@@ -144,15 +144,14 @@ def parse_hydra_configs(cfg: DictConfig):
     rlg_trainer.launch_rlg_hydra(env)
     rlg_trainer.run()
 
-    env.close()
-
     if cfg.wandb_activate and global_rank == 0:
         tf_files = glob.glob(f"{log_dir}/summaries/events.out.tfevents.*")
         tf_files.sort(key=os.path.getmtime, reverse=True)
         wandb_run.save(tf_files[0])
         wandb_run.log_model(path=f"{log_dir}/nn/{cfg.task_name}.pth")
         wandb.finish()
-        print(f"Uploaded model {log_dir}/nn/{cfg.task_name}.pth!")
+
+    env.close()
 
 
 if __name__ == '__main__':
