@@ -23,7 +23,7 @@ class CustomA2CBase(A2CBase):
         # Adjusts save path to match seed setting to avoid override
         config = params['config']
         seed = params['seed']
-        config['full_experiment_name'] += r'\Seed_' + f'{seed}'
+        config['full_experiment_name'] += r'/Seed_' + f'{seed}'
 
         A2CBase.__init__(self, base_name, params)
 
