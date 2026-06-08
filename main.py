@@ -152,6 +152,7 @@ def parse_hydra_configs(cfg: DictConfig):
         wandb_run.save(tf_files[0])
         wandb_run.log_model(path=f"{log_dir}/nn/{cfg.task_name}.pth")
         wandb.finish()
+        print(f"Uploaded model {log_dir}/nn/{cfg.task_name}.pth!")
 
 
 if __name__ == '__main__':
