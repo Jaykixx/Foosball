@@ -19,8 +19,9 @@ env:
   resetVelocityNoise: 5
 
   terminationHeight: 0.10
-  terminationPenalty: 10
-  timeoutPenalty: 4
+  terminationPenalty: 20
+  stagnationPenalty: 12
+  timeoutPenalty: 0
 
   winReward: 20
   lossPenalty: 20

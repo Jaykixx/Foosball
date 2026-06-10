@@ -332,7 +332,7 @@ class FoosballSelfPlay(FoosballTask):
 
         # Detect and punish inaction
         inaction, ball_vel = self.detect_stagnating_games(timeouts)
-        self.rew_buf[inaction] = - self.termination_penalty
+        self.rew_buf[inaction] = -self.stagnation_penalty
         self.reset_buf = torch.max(self.reset_buf, inaction)
 
         # Log mean and standard deviation of ball speed to detect stagnating games
