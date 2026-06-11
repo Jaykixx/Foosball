@@ -322,7 +322,7 @@ class FoosballSelfPlay(FoosballTask):
         ball_pos = pos - self._env_pos
 
         # Optional Reward: Ball near opponent goal
-        self.rew_buf += self._dist_to_goal_reward(ball_pos)
+        # self.rew_buf += self._dist_to_goal_reward(ball_pos)
 
         # Optional Reward: Regularization of actions
         # self.rew_buf += 0.1 * self._compute_action_regularization()
