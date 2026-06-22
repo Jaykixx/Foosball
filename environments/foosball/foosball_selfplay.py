@@ -316,7 +316,9 @@ class FoosballSelfPlay(FoosballTask):
         stagnating = (self.ball_vel_history < 5e-2).all(dim=-1)  # No movement across horizon
         inaction = torch.min(valid_envs, stagnating)
 
-        return inaction, ball_vel
+        penalize = torch.min(self.obs_buf[:, :, 0] == 1, torch.abs(self.obs_buf[:, :, self._num_obj_types]) < 0.02).sum(dim=-1, dtype=torch.bool)
+
+        return inaction, ball_vel, penalize & inaction
 
     def _calculate_metrics(self):
         wins, losses, timeouts = super()._calculate_metrics()
@@ -334,8 +336,8 @@ class FoosballSelfPlay(FoosballTask):
         # self.rew_buf += self._fig_to_ball_reward(ball_pos)
 
         # Detect and punish inaction
-        inaction, ball_vel = self.detect_stagnating_games(timeouts)
-        self.rew_buf[inaction] = -self.stagnation_penalty
+        inaction, ball_vel, penalize = self.detect_stagnating_games(timeouts)
+        self.rew_buf[penalize] = -self.stagnation_penalty
         self.reset_buf = torch.max(self.reset_buf, inaction)
 
         # Log mean and standard deviation of ball speed to detect stagnating games
