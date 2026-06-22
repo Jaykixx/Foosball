@@ -236,6 +236,9 @@ class FoosballSelfPlay(FoosballTask):
             obs = obs.flatten(start_dim=1)
             inv_obs = inv_obs.flatten(start_dim=1)
 
+        # °/s to rad/s
+        obs[..., -1] *= torch.pi / 180
+
         self.obs_buf = obs
         self.inv_obs_buf = inv_obs
 
