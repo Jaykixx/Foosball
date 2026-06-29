@@ -148,7 +148,12 @@ def parse_hydra_configs(cfg: DictConfig):
         tf_files = glob.glob(f"{log_dir}/summaries/events.out.tfevents.*")
         tf_files.sort(key=os.path.getmtime, reverse=True)
         wandb_run.save(tf_files[0])
-        wandb_run.log_model(path=f"{log_dir}/nn/{cfg.task_name}.pth")
+
+        artifact = wandb.Artifact(name="model", type="model")
+
+        artifact.add_file(local_path=f"{log_dir}/nn/{cfg.task_name}.pth")
+
+        wandb_run.log_artifact(artifact)
         wandb.finish()
 
     env.close()
