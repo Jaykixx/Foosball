@@ -40,6 +40,7 @@ class BaseTask(RLTask):
         self.object_centric_obs = self._env_cfg['object_centric_obs']
         if self.object_centric_obs:
             self.flatten_obs = self._env_cfg['flatten_obs']
+            self.ball_relative_obs = self._env_cfg['ball_relative_obs']
             obs_features = self._num_obj_types + self._num_obj_features
             self._num_observations = self._num_objects * obs_features
             if self.flatten_obs:

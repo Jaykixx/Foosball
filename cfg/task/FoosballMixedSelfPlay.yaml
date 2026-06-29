@@ -34,6 +34,7 @@ env:
   #       In case of object centric obs the object-identifier one-hot-encoding will be fully zero for inactive rods.
   object_centric_obs: True  # Obs will have shape num_envs x num_obj x num_features
   flatten_obs: False  # Flattens object centric obs to num_envs x (num_obj * num_features)
+  ball_relative_obs: True
 
   applyKalmanFiltering: False
   applyKinematicConstraints: False  # Applies a jerk limited scurve planner as low level controller

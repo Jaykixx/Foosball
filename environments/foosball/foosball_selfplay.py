@@ -224,13 +224,12 @@ class FoosballSelfPlay(FoosballTask):
         inv_obs = torch.cat(list(inv_obj_obs.values()), dim=1)
 
         # Center obs around ball
-        obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
-        inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_pos[:, None]
-        # velocities toward ball should be positive and vice versa -> NOPE!
-        obs[:, :-1, -3:-1] -= ball_vel[:, None]
-        inv_obs[:, :-1, -3:-1] += ball_vel[:, None]
-        # obs[:, :-1, -3:-1] *= - torch.sign(obs[:, :-1, self._num_obj_types:self._num_obj_types+2])
-        # inv_obs[:, :-1, -3:-1] *= - torch.sign(inv_obs[:, :-1, self._num_obj_types:self._num_obj_types + 2])
+        if self.ball_relative_obs:
+            obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
+            inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_pos[:, None]
+
+            obs[:, :-1, -3:-1] -= ball_vel[:, None]
+            inv_obs[:, :-1, -3:-1] += ball_vel[:, None]
 
         if self.flatten_obs:
             obs = obs.flatten(start_dim=1)
