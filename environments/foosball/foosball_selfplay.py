@@ -231,13 +231,15 @@ class FoosballSelfPlay(FoosballTask):
             obs[:, :-1, -3:-1] -= ball_vel[:, None]
             inv_obs[:, :-1, -3:-1] += ball_vel[:, None]
 
+
+        # scale rotational velocity
+        obs[..., -1] /= torch.pi * 60
+        inv_obs[..., -1] /= torch.pi * 60
+
         if self.flatten_obs:
             obs = obs.flatten(start_dim=1)
             inv_obs = inv_obs.flatten(start_dim=1)
 
-        # °/s to rad/s
-        obs[..., -1] *= torch.pi / 180
-        inv_obs[..., -1] *= torch.pi / 180
 
         self.obs_buf = obs
         self.inv_obs_buf = inv_obs
