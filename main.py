@@ -138,6 +138,7 @@ def parse_hydra_configs(cfg: DictConfig):
             dir=log_dir,
             sync_tensorboard=True,
             monitor_gym=True,
+            save_code=True,
         )
 
     rlg_trainer = RLGTrainer(cfg, cfg_dict)
