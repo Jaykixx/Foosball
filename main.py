@@ -119,6 +119,18 @@ def parse_hydra_configs(cfg: DictConfig):
     task = initialize_task(cfg_dict, env)
 
     if cfg.wandb_activate and global_rank == 0:
+        try:
+            import subprocess
+            git_hash = subprocess.run("git rev-parse --short HEAD", shell=True,
+                                      capture_output=True,
+                                      text=True).stdout.strip()
+            git_url = subprocess.run("git remote get-url origin", shell=True,
+                                     capture_output=True,
+                                     text=True).stdout.strip()
+        except:
+            git_hash = None
+            git_url = None
+
         # Make sure to install WandB if you actually use this.
         import wandb
 
@@ -139,6 +151,10 @@ def parse_hydra_configs(cfg: DictConfig):
             sync_tensorboard=True,
             monitor_gym=True,
             save_code=True,
+            settings=dict(
+                git_remote_url=git_url,
+                git_commit=git_hash,
+            ),
         )
 
     rlg_trainer = RLGTrainer(cfg, cfg_dict)
