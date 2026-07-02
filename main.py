@@ -119,26 +119,39 @@ def parse_hydra_configs(cfg: DictConfig):
     task = initialize_task(cfg_dict, env)
 
     if cfg.wandb_activate and global_rank == 0:
+        cfg_dict["_info"] = {
+            "docker_container_id": os.environ.get('HOSTNAME', None)
+        }
         try:
             import subprocess
-            git_hash = subprocess.run("git rev-parse --short HEAD", shell=True,
-                                      capture_output=True,
-                                      text=True).stdout.strip()
-            git_url = subprocess.run("git remote get-url origin", shell=True,
-                                     capture_output=True,
-                                     text=True).stdout.strip()
+            cfg_dict["_info"]["git_hash"] = subprocess.run(
+                "git rev-parse --short HEAD",
+                shell=True,
+                capture_output=True,
+                text=True).stdout.strip()
+            cfg_dict["_info"]["git_url"] = subprocess.run(
+                "git remote get-url origin",
+                shell=True,
+                capture_output=True,
+                text=True).stdout.strip()
+            cfg_dict["_info"]["git_branch"] = subprocess.run(
+                "git rev-parse --abbrev-ref HEAD",
+                shell=True,
+                capture_output=True,
+                text=True).stdout.strip()
+
         except:
-            git_hash = None
-            git_url = None
+            pass
 
         # Make sure to install WandB if you actually use this.
         import wandb
 
         run_name = f"{cfg.wandb_name}_{time_str}"
 
-
         log_dir = f"{cfg.log_dir}/{cfg.task_name}/Seed_{cfg.seed}"
         wandb.tensorboard.patch(tensorboard_x=True, pytorch=True, root_logdir=f"{log_dir}/summaries")
+
+        cfg_dict["_info"]["wandb_dir"] = log_dir
 
         wandb_run= wandb.init(
             project=cfg.wandb_project,
@@ -151,10 +164,6 @@ def parse_hydra_configs(cfg: DictConfig):
             sync_tensorboard=True,
             monitor_gym=True,
             save_code=True,
-            settings=dict(
-                git_remote_url=git_url,
-                git_commit=git_hash,
-            ),
         )
 
     rlg_trainer = RLGTrainer(cfg, cfg_dict)
