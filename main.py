@@ -122,20 +122,23 @@ def parse_hydra_configs(cfg: DictConfig):
         cfg_dict["_info"] = {
             "docker_container_id": os.environ.get('HOSTNAME', None)
         }
+
+        # get file path for git infos
+        dir_path = os.path.dirname(os.path.realpath(__file__))
         try:
             import subprocess
             cfg_dict["_info"]["git_hash"] = subprocess.run(
-                "git rev-parse --short HEAD",
+                f"cd {dir_path} & git rev-parse --short HEAD",
                 shell=True,
                 capture_output=True,
                 text=True).stdout.strip()
             cfg_dict["_info"]["git_url"] = subprocess.run(
-                "git remote get-url origin",
+                f"cd {dir_path} & git remote get-url origin",
                 shell=True,
                 capture_output=True,
                 text=True).stdout.strip()
             cfg_dict["_info"]["git_branch"] = subprocess.run(
-                "git rev-parse --abbrev-ref HEAD",
+                f"cd {dir_path} & git rev-parse --abbrev-ref HEAD",
                 shell=True,
                 capture_output=True,
                 text=True).stdout.strip()
