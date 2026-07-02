@@ -52,6 +52,15 @@ class FoosballSelfPlay(FoosballTask):
 
         self.opponents = None
 
+        if self._task_cfg["env"]["distToBallReward"]:
+            def reward_add(ball_pos):
+                self.rew_buf += self._dist_to_goal_reward(ball_pos)
+
+            self.maybe_add_dist_to_ball_reward = reward_add
+        else:
+            self.maybe_add_dist_to_ball_reward = lambda ball_pos: None
+
+
     def add_opponent_action(self, actions):
         op_actions = tuple([
             torch.atleast_2d(
@@ -330,6 +339,7 @@ class FoosballSelfPlay(FoosballTask):
 
         # Optional Reward: Ball near opponent goal
         # self.rew_buf += self._dist_to_goal_reward(ball_pos)
+        self.maybe_add_dist_to_ball_reward(ball_pos)
 
         # Optional Reward: Regularization of actions
         # self.rew_buf += 0.1 * self._compute_action_regularization()

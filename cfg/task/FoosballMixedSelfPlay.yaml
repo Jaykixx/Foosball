@@ -18,6 +18,8 @@ env:
   resetPositionNoise: 0.25
   resetVelocityNoise: 5
 
+  distToBallReward: True
+
   terminationHeight: 0.10
   terminationPenalty: 20
   stagnationPenalty: 12
