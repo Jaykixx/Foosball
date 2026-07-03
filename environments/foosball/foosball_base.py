@@ -433,6 +433,12 @@ class FoosballTask(BaseTask):
         self.reset_buf = torch.max(goal_mask, timeouts)
         self.reset_buf = torch.max(self.reset_buf, terminations)
 
+        # calculate termination rate to log it and plot it
+        if self.reset_buf.sum() > 0:
+            self.extras["Termination Rate"] = terminations.sum() / self.reset_buf.sum()
+        else:
+            self.extras["Termination Rate"] = 0.0
+
         return wins, losses, timeouts
 
     def get_camera_sensor(self) -> None:
