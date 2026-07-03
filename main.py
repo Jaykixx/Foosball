@@ -128,21 +128,20 @@ def parse_hydra_configs(cfg: DictConfig):
         try:
             import subprocess
             cfg_dict["_info"]["git_hash"] = subprocess.run(
-                f"cd {dir_path} & git rev-parse --short HEAD",
+                f"cd {dir_path} && git rev-parse --short HEAD",
                 shell=True,
                 capture_output=True,
                 text=True).stdout.strip()
             cfg_dict["_info"]["git_url"] = subprocess.run(
-                f"cd {dir_path} & git remote get-url origin",
+                f"cd {dir_path} && git remote get-url origin",
                 shell=True,
                 capture_output=True,
                 text=True).stdout.strip()
             cfg_dict["_info"]["git_branch"] = subprocess.run(
-                f"cd {dir_path} & git rev-parse --abbrev-ref HEAD",
+                f"cd {dir_path} && git rev-parse --abbrev-ref HEAD",
                 shell=True,
                 capture_output=True,
                 text=True).stdout.strip()
-
         except:
             pass
 
