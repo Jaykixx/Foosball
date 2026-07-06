@@ -426,18 +426,32 @@ class FoosballTask(BaseTask):
         terminations = ball_pos[:, 2] > limit
         self.rew_buf[terminations] = - self.termination_penalty
 
-        # Check done flags
         goal_mask = torch.max(wins, losses)
+
+        # Check glitches
+        mask_z = ball_pos[:, 2] < self._init_ball_position[0, 2] - 0.1
+        mask_x = -0.62 < ball_pos[:, 0] < 0.62
+        mask_y = -0.37 < ball_pos[:, 1] < 0.37
+        glitches = (~mask_x | ~mask_y | mask_z) & ~goal_mask
+        self.rew_buf[glitches] = 0  # no punishment for glitches
+        if glitches.any():
+            print("Glitch!", ball_pos[glitches])
+
+
+        # Check done flags
         timeouts = self.progress_buf >= self._max_episode_length - 1
         self.rew_buf[timeouts] = - self.timeout_penalty
         self.reset_buf = torch.max(goal_mask, timeouts)
         self.reset_buf = torch.max(self.reset_buf, terminations)
+        self.reset_buf = torch.max(self.reset_buf, glitches)
 
-        # calculate termination rate to log it and plot it
+        # calculate termination and glitch rate to log it and plot it
         if self.reset_buf.sum() > 0:
             self.extras["Termination Rate"] = terminations.sum() / self.reset_buf.sum()
+            self.extras["Glitch Rate"] = glitches.sum() / self.reset_buf.sum()
         else:
             self.extras["Termination Rate"] = 0.0
+            self.extras["Glitch Rate"] = 0.0
 
         return wins, losses, timeouts
 
