@@ -177,11 +177,18 @@ def parse_hydra_configs(cfg: DictConfig):
         tf_files.sort(key=os.path.getmtime, reverse=True)
         wandb_run.save(tf_files[0])
 
+        # log normal model, e.g., FoosballMixedSelfplay.pth
         artifact = wandb.Artifact(name="model", type="model")
-
         artifact.add_file(local_path=f"{log_dir}/nn/{cfg.task_name}.pth")
-
         wandb_run.log_artifact(artifact)
+
+        # log final model, e.g., last_FoosballMixedSelfPlay_ep_100000_rew_13.103028.pth
+        artifact = wandb.Artifact(name="final_model", type="model")
+        models = glob.glob(f"{log_dir}/nn/last_*.pth")
+        models.sort(key=os.path.getmtime, reverse=True)
+        artifact.add_file(local_path=models[0])
+        wandb_run.log_artifact(artifact)
+
         wandb.finish()
 
     env.close()
