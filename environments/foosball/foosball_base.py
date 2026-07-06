@@ -430,9 +430,9 @@ class FoosballTask(BaseTask):
 
         # Check glitches
         mask_z = ball_pos[:, 2] < self._init_ball_position[0, 2] - 0.1
-        mask_x = -0.62 < ball_pos[:, 0] < 0.62
-        mask_y = -0.37 < ball_pos[:, 1] < 0.37
-        glitches = (~mask_x | ~mask_y | mask_z) & ~goal_mask
+        mask_x = (-0.62 > ball_pos[:, 1]) | (ball_pos[:, 1] > 0.62)
+        mask_y = (-0.37 > ball_pos[:, 1]) | (ball_pos[:, 1] > 0.37)
+        glitches = (mask_x | mask_y | mask_z) & ~goal_mask
         self.rew_buf[glitches] = 0  # no punishment for glitches
         if glitches.any():
             print("Glitch!", ball_pos[glitches])
