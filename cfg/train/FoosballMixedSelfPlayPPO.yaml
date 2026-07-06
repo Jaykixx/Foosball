@@ -105,6 +105,8 @@ params:
       games_to_check: 100
       env_update_num: 1
       check_scores: True
+      opponent_checkpoint: ${...load_path}
+      test: ${.....test}
 
     env_config:
       name: foosball_self_play_v0

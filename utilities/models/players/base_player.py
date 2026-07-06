@@ -192,7 +192,11 @@ class A2CPlayer(BasePlayer):
             if op_agent and not opponent_initiated:
                 opponent_initiated = True
                 print('Setting opponent weights for selfplay')
-                self.env.set_weights([0], self.get_weights())
+                if self.config["self_play_config"]["test"]:
+                    self.env.set_weights([0], torch.load(self.config["self_play_config"]["opponent_checkpoint"], weights_only=False))
+                    print("Set opponents weights from checkpoint", self.config["self_play_config"]["opponent_checkpoint"])
+                else:
+                    self.env.set_weights([0], self.get_weights())
 
             if need_init_rnn:
                 self.init_rnn()
