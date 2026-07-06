@@ -6,9 +6,9 @@ physics_engine: ${..physics_engine}
 # if given, will override the device setting in gym.
 env:
   #  numEnvs: ${...num_envs}
-  numEnvs: ${resolve_default:4096,${...num_envs}}  # 16384
+  numEnvs: ${resolve_default:256,${...num_envs}}  # 16384
   envSpacing: 3
-  episodeLength: 3600  # x = desired_time / (controlFrequencyInv * sim.dt)
+  episodeLength: 900  # x = desired_time / (controlFrequencyInv * sim.dt)
 
   clipActions: 1.0
 
@@ -18,11 +18,15 @@ env:
   resetPositionNoise: 0.25
   resetVelocityNoise: 5
 
-  terminationHeight: 0.10
-  terminationPenalty: 1000
+  distToBallReward: True
 
-  winReward: 1000
-  lossPenalty: 1000
+  terminationHeight: 0.10
+  terminationPenalty: 20
+  stagnationPenalty: 12
+  timeoutPenalty: 0
+
+  winReward: 20
+  lossPenalty: 20
 
   num_opponents: 1
 
@@ -30,6 +34,7 @@ env:
   #            Use with caution in selfplay scenarios! They are designed for transformers.
   object_centric_obs: False  # Obs will have shape num_envs x num_obj x num_features
   flatten_obs: False  # Flattens object centric obs to num_envs x (num_obj * num_features)
+  ball_relative_obs: True
 
   applyKalmanFiltering: False
   applyKinematicConstraints: False  # Applies a jerk limited scurve planner as low level controller

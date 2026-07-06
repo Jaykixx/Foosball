@@ -327,7 +327,7 @@ class FoosballSelfPlay(FoosballTask):
         stagnating = (self.ball_vel_history < 5e-2).all(dim=-1)  # No movement across horizon
         inaction = torch.min(valid_envs, stagnating)
 
-        penalize = torch.min(self.obs_buf[:, :, 0] == 1, torch.abs(self.obs_buf[:, :, self._num_obj_types]) < 0.02).sum(dim=-1, dtype=torch.bool)
+        penalize = torch.min(self.obs_buf[..., 0] == 1, torch.abs(self.obs_buf[..., self._num_obj_types]) < 0.02).sum(dim=-1, dtype=torch.bool)
 
         return inaction, ball_vel, penalize & inaction
 
@@ -361,3 +361,26 @@ class FoosballSelfPlay(FoosballTask):
         self.extras["Ball Velocity Std"] = ball_vel.std()
 
         return wins, losses, timeouts
+
+    def reset_ball(self, env_ids):
+        if self.cfg["test"]:
+            indices = env_ids.to(dtype=torch.int32)
+            num_resets = len(env_ids)
+
+            init_ball_pos = self._init_ball_position[env_ids].clone()
+            sign = (2 * (torch.rand(num_resets, device=self.device) > 0.5) - 1)
+            init_ball_pos[:, 1] += 0.32 * sign
+
+            init_ball_rot = self._init_ball_rotation[env_ids].clone()
+            self._balls.set_world_poses(init_ball_pos + self._env_pos[env_ids],
+                                        init_ball_rot, indices=indices)
+
+            init_ball_vel = torch.zeros_like(
+                self._init_ball_velocities[env_ids])
+            init_ball_vel[:, 1] -= torch.rand(num_resets,
+                                              device=self.device) * sign * 2
+            init_ball_vel[:, 0] += 1.2 * torch.rand(num_resets,
+                                                    device=self.device) - 0.6
+            self._balls.set_velocities(init_ball_vel, indices=indices)
+        else:
+            super().reset_ball(env_ids)
