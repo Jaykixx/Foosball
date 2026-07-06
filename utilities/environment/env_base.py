@@ -98,6 +98,8 @@ class CustomVecEnvRLGames(VecEnvRLGames):
                 self._world.step(render=False)
                 self.sim_frame_count += 1
 
+        if self.task.cfg["capture"]:
+            self.render()
         self._obs, self._rew, self._resets, self._extras = self._task.post_physics_step()
 
         if self._task.randomize_observations:
