@@ -66,7 +66,7 @@ class FoosballSelfPlay(FoosballTask):
         opponent_flatten_obs = self.cfg['train']['params']['config']['self_play_config']['opponent']['flatten_obs']
         self.get_opponent_observations = (lambda: self.get_obj_centric_observations(opponent_ball_relative_obs, opponent_flatten_obs)) if opponent_object_centric_obs else self.get_standard_observations
 
-        self.same_obs = (self.object_centric_obs == opponent_ball_relative_obs) and (self.ball_relative_obs == opponent_object_centric_obs if self.object_centric_obs else True)
+        self.same_obs = (self.object_centric_obs == opponent_object_centric_obs) and (not self.object_centric_obs or self.ball_relative_obs == opponent_ball_relative_obs)
 
 
     def add_opponent_action(self, actions):
@@ -263,7 +263,7 @@ class FoosballSelfPlay(FoosballTask):
 
     def get_observations(self) -> dict:
         if self.same_obs:
-            self.obs_buf, self.inv_obs_buf = self.get_same_observations()
+            self.obs_buf, self.inv_obs_buf = self.get_player_observations()
         else:
             self.obs_buf, _ = self.get_player_observations()
             _, self.inv_obs_buf = self.get_opponent_observations()
