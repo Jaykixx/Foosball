@@ -8,40 +8,6 @@ params:
   model:
     name: continuous_a2c_logstd
 
-  network:
-    name: oc_transformer  # oc_transformer or actor_critic
-    separate: False
-    space:
-      continuous:
-        mu_activation: None
-        sigma_activation: None
-        mu_init:
-          name: default
-          # gain: 0.01
-        value_init:
-          name: default
-          # gain: 1
-        sigma_init:
-          name: const_initializer
-          val: 0
-        fixed_sigma: True
-    mlp:
-      units: [256, 256, 128]
-      activation: tanh
-      d2rl: False
-      initializer:
-        name: default
-      regularizer:
-        name: None
-
-    transformer: # Only used if name == oc_transformer
-      emb_dim: 128
-      num_heads: 8
-      num_blocks: 3
-      activation: relu
-      dropout_prob: 0.0
-      pooling_type: 'avg'  # 'max' or 'avg'
-
   dmp:  # If active applies dmp in between policy and env
     active: False
     type: discrete
@@ -105,8 +71,12 @@ params:
       games_to_check: 100
       env_update_num: 1
       check_scores: True
-      opponent_checkpoint: ${...load_path}
       test: ${.....test}
+      opponent:
+        checkpoint: ${....load_path}
+        object_centric_obs: true
+        ball_relative_obs: false
+        flatten_obs: false
 
     env_config:
       name: foosball_self_play_v0
@@ -114,3 +84,7 @@ params:
       agents: 2
       config_path: cfg/train/FoosballSelfPlayPPO.yaml
 
+defaults:
+  - _self_
+  - network@params.network: base
+  - network@params.config.self_play_config.opponent.network: base
