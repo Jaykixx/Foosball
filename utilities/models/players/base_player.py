@@ -184,6 +184,7 @@ class A2CPlayer(BasePlayer):
         has_masks_func = getattr(self.env, "has_action_mask", None) is not None
         goals = 0
         max_goals = self.max_goals
+        goal_factor = self.env.task.goal_factor
 
         if has_masks_func:
             has_masks = self.env.has_action_mask()
@@ -246,18 +247,15 @@ class A2CPlayer(BasePlayer):
                             print_game_res = True
                             game_res = info.get('scores', 0.5)
 
-                    if self.print_stats:
-                        if print_game_res:
-                            print('reward:', cur_rewards / done_count,
-                                  'steps:', cur_steps / done_count, 'w:', game_res)
-                        else:
-                            print('reward:', cur_rewards / done_count,
-                                  'steps:', cur_steps / done_count)
-
                     sum_game_res += game_res
-                    # if batch_size // self.num_agents == 1 or games_played >= n_games:
-                    #     break
-                    goals = sum_game_res // 1000 + sum_game_res % 1000
+                    goals = sum_game_res // goal_factor + sum_game_res % goal_factor
+
+                    if self.print_stats:
+                        print('reward:', cur_rewards / done_count,
+                              'steps:', cur_steps / done_count, end=' ')
+                        if print_game_res:
+                            print('w:', game_res, end=' ')
+                        print('games:', games_played, f'goals: {sum_game_res // goal_factor}:{sum_game_res % goal_factor}')
 
         print(sum_rewards, sum_game_res, games_played, goals)
         print('Results:', end='\n\t')
@@ -266,7 +264,7 @@ class A2CPlayer(BasePlayer):
         if print_game_res:
             print('win rate:', sum_game_res / games_played * n_game_life, end='\n\t')
 
-        print(f"standings: {sum_game_res // 1000}:{sum_game_res % 1000} of {games_played}")
+        print(f"standings: {sum_game_res // goal_factor}:{sum_game_res % goal_factor} of {games_played}")
 
     def evaluate(self):
         n_games = 8192

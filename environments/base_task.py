@@ -84,6 +84,8 @@ class BaseTask(RLTask):
         self.control_mode = 'position'
         self.target_mode = 'position'
 
+        self.goal_factor = self._env_cfg.get('goal_factor', 1000)
+
     @property
     def dt(self):
         return self.phys_dt * self.control_frequency_inv
@@ -322,7 +324,7 @@ class BaseTask(RLTask):
         self.extras["Failures"][failures] = 1
         self.extras["Timeouts"][:] = 0
         self.extras["Timeouts"][timeouts] = 1
-        self.extras["scores"] = successes.sum().item() * 1000 + failures.sum().item()
+        self.extras["scores"] = successes.sum().item() * self.goal_factor + failures.sum().item()
 
         # For tensorboard plots during training
         if self.reset_buf.sum() > 0:
