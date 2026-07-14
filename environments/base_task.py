@@ -322,6 +322,7 @@ class BaseTask(RLTask):
         self.extras["Failures"][failures] = 1
         self.extras["Timeouts"][:] = 0
         self.extras["Timeouts"][timeouts] = 1
+        self.extras["scores"] = successes.sum().item() * 1000 + failures.sum().item()
 
         # For tensorboard plots during training
         if self.reset_buf.sum() > 0:

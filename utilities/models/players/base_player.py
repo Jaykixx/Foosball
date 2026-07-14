@@ -21,6 +21,8 @@ class A2CPlayer(BasePlayer):
     def __init__(self, params):
         BasePlayer.__init__(self, params)
 
+        self.max_goals = self.player_config.get('max_goals', torch.inf)
+
         self.network = self.config['network']
         self.actions_num = self.action_space.shape[0]
         self.actions_low = torch.from_numpy(self.action_space.low.copy()).float().to(self.device)
@@ -168,6 +170,7 @@ class A2CPlayer(BasePlayer):
         return obses
 
     def run(self):
+        self.model.eval()
         n_games = self.games_num
         render = self.render_env
         n_game_life = self.n_game_life
@@ -179,16 +182,14 @@ class A2CPlayer(BasePlayer):
         games_played = 0
         has_masks = False
         has_masks_func = getattr(self.env, "has_action_mask", None) is not None
+        goals = 0
+        max_goals = self.max_goals
 
         if has_masks_func:
             has_masks = self.env.has_action_mask()
 
         need_init_rnn = self.is_rnn
-        opponent_initiated = False
-        for _ in range(n_games):
-            if games_played >= n_games:
-                break
-
+        while games_played < n_games and goals < max_goals:
             obses = self.env_reset(self.env)
             batch_size = 1
             batch_size = self.get_batch_size(obses, batch_size)
@@ -200,9 +201,10 @@ class A2CPlayer(BasePlayer):
             cr = torch.zeros(batch_size, dtype=torch.float32)
             steps = torch.zeros(batch_size, dtype=torch.float32)
 
-            print_game_res = False
-
-            for n in range(self.max_steps):
+            n = 0
+            while n < self.max_steps and games_played < n_games and goals < max_goals:
+                n += 1
+                print_game_res = False
                 if has_masks:
                     masks = self.env.get_action_mask()
                     action = self.get_masked_action(
@@ -255,16 +257,16 @@ class A2CPlayer(BasePlayer):
                     sum_game_res += game_res
                     # if batch_size // self.num_agents == 1 or games_played >= n_games:
                     #     break
-                    if games_played >= n_games:
-                        break
+                    goals = sum_game_res // 1000 + sum_game_res % 1000
 
-        print(sum_rewards)
+        print(sum_rewards, sum_game_res, games_played, goals)
+        print('Results:', end='\n\t')
+        print('avg reward:', sum_rewards / games_played * n_game_life,
+              '\n\tavg steps:', sum_steps / games_played * n_game_life, end='\n\t')
         if print_game_res:
-            print('av reward:', sum_rewards / games_played * n_game_life, 'av steps:', sum_steps /
-                  games_played * n_game_life, 'winrate:', sum_game_res / games_played * n_game_life)
-        else:
-            print('av reward:', sum_rewards / games_played * n_game_life,
-                  'av steps:', sum_steps / games_played * n_game_life)
+            print('win rate:', sum_game_res / games_played * n_game_life, end='\n\t')
+
+        print(f"standings: {sum_game_res // 1000}:{sum_game_res % 1000} of {games_played}")
 
     def evaluate(self):
         n_games = 8192
