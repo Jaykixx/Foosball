@@ -46,10 +46,15 @@ class A2CPlayer(BasePlayer):
             if self.apply_dmps:
                 self.build_dmp_models(params['dmp'])
 
-        self.build_model()
-
         if params.get("opponent", False):  # TODO: Selfplay?
+            if params['config']['self_play_config']['opponent']['object_centric_obs']:
+                self.obs_shape = self.env_info['oc_obs_shape']
+            else:
+                self.obs_shape = self.env_info['regular_obs_shape']
+            self.build_model()
             self.model.eval()
+        else:
+            self.build_model()
 
     @property
     def _env_progress_buffer(self):
@@ -187,16 +192,6 @@ class A2CPlayer(BasePlayer):
             obses = self.env_reset(self.env)
             batch_size = 1
             batch_size = self.get_batch_size(obses, batch_size)
-
-            op_agent = getattr(self.env, "has_opponent", None)
-            if op_agent and not opponent_initiated:
-                opponent_initiated = True
-                print('Setting opponent weights for selfplay')
-                if self.config["self_play_config"]["test"]:
-                    self.env.set_weights([0], torch.load(self.config["self_play_config"]["opponent_checkpoint"], weights_only=False))
-                    print("Set opponents weights from checkpoint", self.config["self_play_config"]["opponent_checkpoint"])
-                else:
-                    self.env.set_weights([0], self.get_weights())
 
             if need_init_rnn:
                 self.init_rnn()

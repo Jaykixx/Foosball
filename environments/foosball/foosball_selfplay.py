@@ -60,6 +60,14 @@ class FoosballSelfPlay(FoosballTask):
         else:
             self.maybe_add_dist_to_ball_reward = lambda ball_pos: None
 
+        self.get_player_observations = (lambda: self.get_obj_centric_observations(self.ball_relative_obs, self.flatten_obs)) if self.object_centric_obs else self.get_standard_observations
+        opponent_ball_relative_obs = self.cfg['train']['params']['config']['self_play_config']['opponent']['ball_relative_obs']
+        opponent_object_centric_obs = self.cfg['train']['params']['config']['self_play_config']['opponent']['object_centric_obs']
+        opponent_flatten_obs = self.cfg['train']['params']['config']['self_play_config']['opponent']['flatten_obs']
+        self.get_opponent_observations = (lambda: self.get_obj_centric_observations(opponent_ball_relative_obs, opponent_flatten_obs)) if opponent_object_centric_obs else self.get_standard_observations
+
+        self.same_obs = (self.object_centric_obs == opponent_ball_relative_obs) and (self.ball_relative_obs == opponent_object_centric_obs if self.object_centric_obs else True)
+
 
     def add_opponent_action(self, actions):
         op_actions = tuple([
@@ -79,7 +87,7 @@ class FoosballSelfPlay(FoosballTask):
         super().cleanup()
         self.inv_obs_buf = torch.zeros_like(self.obs_buf)
 
-    def get_standard_observations(self) -> dict:
+    def get_standard_observations(self):
         dof_pos = self._robots.get_joint_positions(joint_indices=self.active_joint_dofs, clone=False)
         dof_vel = self._robots.get_joint_velocities(joint_indices=self.active_joint_dofs, clone=False)
         dof_pos_w = dof_pos[:, :self.num_actions]
@@ -93,23 +101,25 @@ class FoosballSelfPlay(FoosballTask):
         ball_vel = self._balls.get_velocities(clone=False)[:, :2]
 
         if self._full_opponent_obs:
-            self.obs_buf = torch.cat(
+            obs = torch.cat(
                 (dof_pos_w, dof_vel_w, dof_pos_b, dof_vel_b, ball_pos, ball_vel), dim=-1
             )
 
-            self.inv_obs_buf = torch.cat(
+            inv_obs = torch.cat(
                 (dof_pos_b, dof_vel_b, dof_pos_w, dof_vel_w, -ball_pos, -ball_vel), dim=-1
             ).clone()
         else:
             # num_actions is always even in selfplay (2 Joints per rod)
             half_obs = int(self.num_actions // 2)
-            self.obs_buf = torch.cat(
+            obs = torch.cat(
                 (dof_pos_w, dof_vel_w, dof_pos_b[:, :half_obs], dof_vel_b[:, :half_obs], ball_pos, ball_vel), dim=-1
             )
 
-            self.inv_obs_buf = torch.cat(
+            inv_obs = torch.cat(
                 (dof_pos_b, dof_vel_b, dof_pos_w[:, :half_obs], dof_vel_w[:, :half_obs], -ball_pos, -ball_vel), dim=-1
             ).clone()
+
+        return obs, inv_obs
 
     @staticmethod
     def sort_obj_centric_obs(obs, inverse: bool = False):
@@ -121,7 +131,7 @@ class FoosballSelfPlay(FoosballTask):
             sorted_idx[x_sorted == x] = fig_idx[y_sort_idx]
         return obs[:, sorted_idx]
 
-    def get_obj_centric_observations(self):
+    def get_obj_centric_observations(self, ball_relative_obs=False, flatten_obs=False):
         obj_obs = {
             'player_obs': [],
             'opponent_obs': [],
@@ -233,7 +243,7 @@ class FoosballSelfPlay(FoosballTask):
         inv_obs = torch.cat(list(inv_obj_obs.values()), dim=1)
 
         # Center obs around ball
-        if self.ball_relative_obs:
+        if ball_relative_obs:
             obs[:, :-1, self._num_obj_types:self._num_obj_types+2] -= ball_pos[:, None]
             inv_obs[:, :-1, self._num_obj_types:self._num_obj_types+2] += ball_pos[:, None]
 
@@ -245,19 +255,18 @@ class FoosballSelfPlay(FoosballTask):
         obs[..., -1] /= torch.pi * 60
         inv_obs[..., -1] /= torch.pi * 60
 
-        if self.flatten_obs:
+        if flatten_obs:
             obs = obs.flatten(start_dim=1)
             inv_obs = inv_obs.flatten(start_dim=1)
 
-
-        self.obs_buf = obs
-        self.inv_obs_buf = inv_obs
+        return obs, inv_obs
 
     def get_observations(self) -> dict:
-        if self.object_centric_obs:
-            self.get_obj_centric_observations()
+        if self.same_obs:
+            self.obs_buf, self.inv_obs_buf = self.get_same_observations()
         else:
-            self.get_standard_observations()
+            self.obs_buf, _ = self.get_player_observations()
+            _, self.inv_obs_buf = self.get_opponent_observations()
 
         observations = {
             self._robots.name: {
@@ -283,14 +292,17 @@ class FoosballSelfPlay(FoosballTask):
 
     def reset(self):
         if self.opponents is None:
-            self.create_opponent(self._cfg['train'])
+            self.create_opponent()
         super().reset()
 
     def reset_idx(self, env_ids):
         FoosballTask.reset_idx(self, env_ids)
         self.ball_vel_history[env_ids] = 0
 
-    def create_opponent(self, config) -> None:
+    def create_opponent(self) -> None:
+        config = self._cfg['train'].copy()
+        config['params']['network'] = config['params']['config']['self_play_config']['opponent']['network']
+
         r = Runner()
         r.load(config)
         # create opponents in eval mode
@@ -299,7 +311,7 @@ class FoosballSelfPlay(FoosballTask):
         self.opponents = [r.create_player() for _ in range(self.num_opponents)]
         if config['params']['load_checkpoint']:
             for agent in self.opponents:
-                agent.restore(config['params']['load_path'])
+                agent.restore(config['params']['config']['self_play_config']['opponent']['checkpoint'])
 
     def prepare_opponent(self):
         self._full_actions = self.add_opponent_action

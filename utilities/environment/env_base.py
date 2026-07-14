@@ -41,6 +41,11 @@ class CustomVecEnvRLGames(VecEnvRLGames):
             self.joint_space = self.task.joint_space
         if hasattr(self.task, "_num_obj_types"):
             self.num_object_types = self.task._num_obj_types
+            if hasattr(self.task, "_num_obj_features") and hasattr(self.task, "_num_objects"):
+                self.oc_obs_shape = (self.task._num_objects, self.task._num_obj_types + self.task._num_obj_features)
+        if hasattr(self.task, "_num_joint_observations") and hasattr(self.task, "_num_task_observations"):
+            self.regular_obs_shape = (self.task._num_joint_observations + self.task._num_task_observations, )
+
 
     @property
     def task(self):

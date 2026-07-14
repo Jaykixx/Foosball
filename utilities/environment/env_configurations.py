@@ -24,6 +24,10 @@ def get_extended_env_info(env):
         result_shapes['value_size'] = env.value_size
     if hasattr(env, "num_object_types"):
         result_shapes['num_object_types'] = env.num_object_types
+    if hasattr(env, "oc_obs_shape"):
+        result_shapes['oc_obs_shape'] = env.oc_obs_shape
+    if hasattr(env, "regular_obs_shape"):
+        result_shapes['regular_obs_shape'] = env.regular_obs_shape
     print(result_shapes)
     return result_shapes
 
