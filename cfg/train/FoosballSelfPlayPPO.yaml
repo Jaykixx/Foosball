@@ -1,3 +1,8 @@
+defaults:
+  - network@params.network: base
+  - network@params.config.self_play_config.opponent.network: base
+  - _self_
+
 params:
   seed: ${...seed}
   framework: PPO
@@ -74,17 +79,13 @@ params:
       test: ${.....test}
       opponent:
         checkpoint: ${....load_path}
-        object_centric_obs: true
-        ball_relative_obs: false
-        flatten_obs: false
+        object_centric_obs: ${......task.env.object_centric_obs}
+        ball_relative_obs: ${......task.env.ball_relative_obs}
+        flatten_obs: ${......task.env.flatten_obs}
+        network: ${....network}
 
     env_config:
       name: foosball_self_play_v0
       self_play: True
       agents: 2
       config_path: cfg/train/FoosballSelfPlayPPO.yaml
-
-defaults:
-  - _self_
-  - network@params.network: base
-  - network@params.config.self_play_config.opponent.network: base

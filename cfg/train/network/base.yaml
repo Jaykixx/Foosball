@@ -1,4 +1,4 @@
-name: oc_transformer  # oc_transformer or actor_critic
+name: actor_critic  # oc_transformer or actor_critic
 separate: False
 space:
   continuous:
