@@ -48,7 +48,7 @@ class FoosballTask(BaseTask):
         # Termination conditions
         self.termination_height = self._env_cfg["terminationHeight"]
         self.termination_penalty = self._env_cfg["terminationPenalty"]
-        self.stagnation_penalty = self._env_cfg["stagnationPenalty"]
+        self.stagnation_penalty = self._env_cfg.get("stagnationPenalty", 1000)
         self.timeout_penalty = self._env_cfg.get("timeoutPenalty", 1000)
 
         # Win and Loss Rewards

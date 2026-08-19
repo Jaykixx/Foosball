@@ -26,6 +26,7 @@ env:
 
   object_centric_obs: False  # Obs will have shape num_envs x num_obj x num_features
   flatten_obs: False  # Flattens object centric obs to num_envs x (num_obj * num_features)
+  ball_relative_obs: True
 
   applyKalmanFiltering: False
   applyKinematicConstraints: False # Applies a jerk limited scurve planner as low level controller

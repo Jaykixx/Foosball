@@ -1,7 +1,7 @@
 defaults:
   - network@params.network: base
   - network@params.config.self_play_config.opponent.network: base
-  - _self_
+#  - override params/config/self_play_config/opponent/network: ${.network}
 
 params:
   seed: ${...seed}
@@ -82,7 +82,7 @@ params:
         object_centric_obs: ${......task.env.object_centric_obs}
         ball_relative_obs: ${......task.env.ball_relative_obs}
         flatten_obs: ${......task.env.flatten_obs}
-        network: ${....network}
+#        network: ${....network}
 
     env_config:
       name: foosball_self_play_v0
